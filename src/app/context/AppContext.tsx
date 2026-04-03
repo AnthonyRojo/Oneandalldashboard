@@ -446,6 +446,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return;
+        if (event === "SIGNED_IN" && session?.user) {
+          // Handle new sign in — load user data
+          const user = session.user;
+          const name = user.user_metadata?.name || user.email?.split("@")[0] || "User";
+          const authUser: AuthUser = {
+            id: user.id,
+            name,
+            email: user.email || "",
+            avatar: getInitials(name),
+          };
+          setCurrentUser(authUser);
+          setAccessToken(session.access_token);
+          tokenRef.current = session.access_token;
+
+          const userTeams = await loadUserTeams(session.access_token);
+          if (userTeams.length > 0 && mounted) {
+            const firstTeamId = userTeams[0].id;
+            setCurrentTeamIdState(firstTeamId);
+            currentTeamRef.current = firstTeamId;
+            subscribeToTeam(firstTeamId);
+            await loadTeamData(firstTeamId, session.access_token);
+          }
+        }
         if (event === "TOKEN_REFRESHED" && session) {
           setAccessToken(session.access_token);
           tokenRef.current = session.access_token;
