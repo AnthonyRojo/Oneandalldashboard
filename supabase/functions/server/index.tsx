@@ -256,7 +256,7 @@ app.post("/make-server-7d783630/teams/:teamId/members", async (c) => {
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { teamId } = c.req.param();
-    const { name, email, role, status } = await c.req.json();
+    const { name, email, role, status, userId } = await c.req.json();
     if (!name?.trim() || !email?.trim()) {
       return c.json({ error: "Name and email are required" }, 400);
     }
@@ -271,6 +271,34 @@ app.post("/make-server-7d783630/teams/:teamId/members", async (c) => {
       status: status || "Offline",
     };
     await kv.set(`member:${teamId}:${memberId}`, member);
+    
+    // Look up user by email from Supabase auth and add team to their user_teams list
+    let userIdToAdd = userId;
+    if (!userIdToAdd) {
+      try {
+        const { data: users, error } = await supabaseAdmin.auth.admin.listUsers();
+        if (!error && users) {
+          const foundUser = users.users.find((u: any) => u.email?.toLowerCase() === email.toLowerCase());
+          if (foundUser) {
+            userIdToAdd = foundUser.id;
+            console.log(`[v0] Found user by email: ${email} -> ${userIdToAdd}`);
+          }
+        }
+      } catch (e) {
+        console.log(`[v0] Failed to look up user by email: ${e}`);
+      }
+    }
+    
+    if (userIdToAdd) {
+      const existingIds = ((await kv.get(`user_teams:${userIdToAdd}`)) as string[] | null) || [];
+      if (!existingIds.includes(teamId)) {
+        await kv.set(`user_teams:${userIdToAdd}`, [...existingIds, teamId]);
+        console.log(`[v0] Added team ${teamId} to user ${userIdToAdd}`);
+      }
+    } else {
+      console.log(`[v0] Could not find user ID for email: ${email}`);
+    }
+    
     const actorName = user.user_metadata?.name || user.email?.split("@")[0] || "User";
     await logActivity(teamId, user.id, actorName, "added member", name.trim(), "member");
     return c.json({ member });
