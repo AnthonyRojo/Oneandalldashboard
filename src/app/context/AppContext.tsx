@@ -277,6 +277,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Refs to avoid stale closures
   const currentTeamRef = useRef<string>("");
   const tokenRef = useRef<string | null>(null);
+  const currentUserIdRef = useRef<string | null>(null);
   const realtimeChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -290,8 +291,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const currentMessages = messages.filter((m) => m.teamId === currentTeamId);
 
   // ── Load team data ─────────────────────────────────────────────────────────
-  const loadTeamData = useCallback(async (teamId: string, token: string) => {
-    if (!teamId || !token) return;
+  const loadTeamData = useCallback(async (teamId: string, token: string, userId: string) => {
+    if (!teamId || !token || !userId) return;
     setIsDataLoading(true);
     try {
       const [membersRes, projectsRes, tasksRes, eventsRes, announcementsRes, activitiesRes, messagesRes, groupsRes] =
@@ -306,7 +307,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           api.getChatGroups(teamId, token).catch(() => ({ groups: [] })),
         ]);
 
-      console.log("[v0] Loaded team data:", { teamId, members: membersRes.members?.length, projects: projectsRes.projects?.length, tasks: tasksRes.tasks?.length });
+      // Only update state if this is still the current user (prevent race conditions)
+      if (currentUserIdRef.current !== userId) {
+        console.log("[v0] Ignoring team data response - user changed");
+        return;
+      }
+
+      console.log("[v0] Loaded team data:", { teamId, userId, members: membersRes.members?.length, projects: projectsRes.projects?.length, tasks: tasksRes.tasks?.length });
 
       setMembers((prev) => {
         const others = prev.filter((m) => m.teamId !== teamId);
@@ -350,8 +357,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const refreshTeamData = useCallback(async () => {
-    if (currentTeamId && tokenRef.current) {
-      await loadTeamData(currentTeamId, tokenRef.current);
+    if (currentTeamId && tokenRef.current && currentUserIdRef.current) {
+      await loadTeamData(currentTeamId, tokenRef.current, currentUserIdRef.current);
     }
   }, [currentTeamId, loadTeamData]);
 
@@ -380,8 +387,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       .on("broadcast", { event: "data_changed" }, () => {
         if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
         refreshTimerRef.current = setTimeout(() => {
-          if (tokenRef.current && currentTeamRef.current) {
-            loadTeamData(currentTeamRef.current, tokenRef.current);
+          if (tokenRef.current && currentTeamRef.current && currentUserIdRef.current) {
+            loadTeamData(currentTeamRef.current, tokenRef.current, currentUserIdRef.current);
           }
         }, 300);
       })
@@ -395,15 +402,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [loadTeamData]);
 
   // ── Load teams ─────────────────────────────────────────────────────────────
-  const loadUserTeams = useCallback(async (token: string) => {
+  const loadUserTeams = useCallback(async (token: string, userId: string) => {
     try {
-      console.log("[v0] Calling api.getTeams...");
+      console.log("[v0] Calling api.getTeams for user:", userId);
       const res = await api.getTeams(token);
       console.log("[v0] Teams response:", res);
       const userTeams: Team[] = res.teams || [];
       console.log("[v0] User teams loaded:", userTeams.length, userTeams);
-      setTeams(userTeams);
-      return userTeams;
+      
+      // Only update state if this is still the current user (prevent race conditions)
+      if (currentUserIdRef.current === userId) {
+        setTeams(userTeams);
+        return userTeams;
+      } else {
+        console.log("[v0] Ignoring teams response - user changed");
+        return [];
+      }
     } catch (err) {
       console.log(`[v0] Load teams error: ${err}`);
       return [];
@@ -421,9 +435,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         if (session?.user) {
           const user = session.user;
+          const userId = user.id;
+          
+          // Set user ID ref FIRST to prevent race conditions
+          currentUserIdRef.current = userId;
+          
           const name = user.user_metadata?.name || user.email?.split("@")[0] || "User";
           const authUser: AuthUser = {
-            id: user.id,
+            id: userId,
             name,
             email: user.email || "",
             avatar: getInitials(name),
@@ -432,13 +451,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setAccessToken(session.access_token);
           tokenRef.current = session.access_token;
 
-          const userTeams = await loadUserTeams(session.access_token);
-          if (userTeams.length > 0 && mounted) {
+          const userTeams = await loadUserTeams(session.access_token, userId);
+          if (userTeams.length > 0 && mounted && currentUserIdRef.current === userId) {
             const firstTeamId = userTeams[0].id;
             setCurrentTeamIdState(firstTeamId);
             currentTeamRef.current = firstTeamId;
             subscribeToTeam(firstTeamId);
-            await loadTeamData(firstTeamId, session.access_token);
+            await loadTeamData(firstTeamId, session.access_token, userId);
           }
         }
       } catch (err) {
@@ -454,9 +473,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       async (event, session) => {
         if (!mounted) return;
         if (event === "SIGNED_IN" && session?.user) {
-          console.log("[v0] SIGNED_IN event triggered for user:", session.user.email);
-          // Handle new sign in — clear old data and load user data
-          // Clear all old user data first
+          const user = session.user;
+          const userId = user.id;
+          
+          // Skip if this is the same user (prevents double-loading on initial sign-in)
+          if (currentUserIdRef.current === userId) {
+            console.log("[v0] SIGNED_IN event skipped - same user:", user.email);
+            return;
+          }
+          
+          console.log("[v0] SIGNED_IN event triggered for user:", user.email);
+          
+          // Set user ID ref FIRST to prevent race conditions
+          currentUserIdRef.current = userId;
+          
+          // Clear all old user data
+          setTeams([]);
+          setCurrentTeamIdState("");
+          currentTeamRef.current = "";
           setMembers([]);
           setProjects([]);
           setTasks([]);
@@ -466,10 +500,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setMessages([]);
           setChatGroups([]);
 
-          const user = session.user;
           const name = user.user_metadata?.name || user.email?.split("@")[0] || "User";
           const authUser: AuthUser = {
-            id: user.id,
+            id: userId,
             name,
             email: user.email || "",
             avatar: getInitials(name),
@@ -478,15 +511,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setAccessToken(session.access_token);
           tokenRef.current = session.access_token;
 
-          const userTeams = await loadUserTeams(session.access_token);
+          const userTeams = await loadUserTeams(session.access_token, userId);
           console.log("[v0] User teams loaded:", userTeams.length);
-          if (userTeams.length > 0 && mounted) {
+          if (userTeams.length > 0 && mounted && currentUserIdRef.current === userId) {
             const firstTeamId = userTeams[0].id;
             console.log("[v0] Loading team data for team:", firstTeamId);
             setCurrentTeamIdState(firstTeamId);
             currentTeamRef.current = firstTeamId;
             subscribeToTeam(firstTeamId);
-            await loadTeamData(firstTeamId, session.access_token);
+            await loadTeamData(firstTeamId, session.access_token, userId);
           }
         }
         if (event === "TOKEN_REFRESHED" && session) {
@@ -494,11 +527,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           tokenRef.current = session.access_token;
         }
         if (event === "SIGNED_OUT") {
+          currentUserIdRef.current = null;
           setCurrentUser(null);
           setAccessToken(null);
           tokenRef.current = null;
           setTeams([]);
           setCurrentTeamIdState("");
+          currentTeamRef.current = "";
           setMembers([]);
           setProjects([]);
           setTasks([]);
@@ -522,9 +557,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (id === currentTeamRef.current) return;
       setCurrentTeamIdState(id);
       currentTeamRef.current = id;
-      if (id && tokenRef.current) {
+      if (id && tokenRef.current && currentUserIdRef.current) {
         subscribeToTeam(id);
-        await loadTeamData(id, tokenRef.current);
+        await loadTeamData(id, tokenRef.current, currentUserIdRef.current);
       }
     },
     [loadTeamData, subscribeToTeam]
@@ -539,27 +574,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           console.log(`Login error: ${error?.message}`);
           return false;
         }
-        const user = data.user;
-        const name = user.user_metadata?.name || email.split("@")[0] || "User";
-        setCurrentUser({ id: user.id, name, email: user.email || email, avatar: getInitials(name) });
-        setAccessToken(data.session.access_token);
-        tokenRef.current = data.session.access_token;
-
-        const userTeams = await loadUserTeams(data.session.access_token);
-        if (userTeams.length > 0) {
-          const firstTeamId = userTeams[0].id;
-          setCurrentTeamIdState(firstTeamId);
-          currentTeamRef.current = firstTeamId;
-          subscribeToTeam(firstTeamId);
-          await loadTeamData(firstTeamId, data.session.access_token);
-        }
+        // The onAuthStateChange listener will handle user data loading
+        // We just need to return success here
         return true;
       } catch (err) {
         console.log(`Login unexpected error: ${err}`);
         return false;
       }
     },
-    [loadUserTeams, loadTeamData, subscribeToTeam]
+    []
   );
 
   const signup = useCallback(
@@ -578,6 +601,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(async () => {
+    // Clear user ID ref FIRST to prevent any pending requests from updating state
+    currentUserIdRef.current = null;
+    
     await supabase.auth.signOut();
     if (realtimeChannelRef.current) {
       supabase.removeChannel(realtimeChannelRef.current);
@@ -596,12 +622,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setAnnouncements([]);
     setActivities([]);
     setMessages([]);
+    setChatGroups([]);
   }, []);
 
   // ── Team ops ───────────────────────────────────────────────────────────────
   const createTeam = useCallback(
     async (name: string): Promise<void> => {
-      if (!tokenRef.current) throw new Error("Not authenticated — please log in again.");
+      if (!tokenRef.current || !currentUserIdRef.current) throw new Error("Not authenticated — please log in again.");
       const colors = ["#f59e0b", "#3b82f6", "#8b5cf6", "#10b981", "#ec4899", "#f97316"];
       const color = colors[Math.floor(Math.random() * colors.length)];
       const res = await api.createTeam(name, color, tokenRef.current);
@@ -610,7 +637,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setCurrentTeamIdState(newTeam.id);
       currentTeamRef.current = newTeam.id;
       subscribeToTeam(newTeam.id);
-      await loadTeamData(newTeam.id, tokenRef.current!);
+      await loadTeamData(newTeam.id, tokenRef.current!, currentUserIdRef.current!);
     },
     [loadTeamData, subscribeToTeam]
   );
