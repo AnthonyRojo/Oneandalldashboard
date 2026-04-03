@@ -1,7 +1,20 @@
-import { createClient } from "@supabase/supabase-js";
-import { projectId, publicAnonKey } from "/utils/supabase/info";
+import { createBrowserClient } from "@supabase/ssr";
 
-export const supabase = createClient(
-  `https://${projectId}.supabase.co`,
-  publicAnonKey
+// Singleton instance for client-side usage
+let supabaseInstance: ReturnType<typeof createBrowserClient> | null = null;
+
+export function getSupabaseClient() {
+  if (!supabaseInstance) {
+    supabaseInstance = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+  }
+  return supabaseInstance;
+}
+
+// Export singleton for backward compatibility with AppContext
+export const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );

@@ -2,7 +2,6 @@ import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
 import { createClient } from "npm:@supabase/supabase-js";
-import * as kv from "./kv_store.tsx";
 
 const app = new Hono();
 
@@ -11,7 +10,6 @@ app.use(
   "/*",
   cors({
     origin: "*",
-    // x-user-token carries the user's JWT; Authorization carries the anon key
     allowHeaders: ["Content-Type", "Authorization", "x-user-token"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
@@ -22,24 +20,19 @@ app.use(
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-// Admin client only used for createUser / updateUser
+// Admin client for auth operations
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
 // ── JWT helpers ────────────────────────────────────────────────────────────────
 
-/** Decode a JWT payload without verifying the signature. */
 function decodeJWT(token: string): Record<string, any> | null {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return null;
-
-    // base64url → standard base64 + padding
     const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
     const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
-
-    // atob gives a latin-1 byte string; use TextDecoder for proper UTF-8
     const binary = atob(padded);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
@@ -51,38 +44,17 @@ function decodeJWT(token: string): Record<string, any> | null {
   }
 }
 
-/**
- * Read the user JWT from the custom "x-user-token" header (set by the frontend).
- * The "Authorization" header always carries the anon key so Supabase's invocation
- * layer never blocks the request — our own auth lives in x-user-token.
- */
 function getAuthUser(c: any): { id: string; email: string; user_metadata: Record<string, any> } | null {
   try {
     const token = c.req.header("x-user-token");
-    if (!token) {
-      console.log("Auth: no x-user-token header");
-      return null;
-    }
+    if (!token) return null;
 
     const payload = decodeJWT(token);
-    if (!payload) {
-      console.log("Auth: JWT decode failed");
-      return null;
-    }
+    if (!payload || !payload.sub) return null;
 
-    if (!payload.sub) {
-      console.log(`Auth: no sub in payload, keys=${Object.keys(payload).join(",")}`);
-      return null;
-    }
-
-    // Check expiry
     const now = Math.floor(Date.now() / 1000);
-    if (payload.exp && payload.exp < now) {
-      console.log(`Auth: token expired ${now - payload.exp}s ago`);
-      return null;
-    }
+    if (payload.exp && payload.exp < now) return null;
 
-    console.log(`Auth OK: user=${payload.sub} role=${payload.role}`);
     return {
       id: payload.sub as string,
       email: (payload.email ?? "") as string,
@@ -98,29 +70,24 @@ function getInitials(name: string): string {
   return name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2);
 }
 
-// Helper: log an activity to the team's activity feed
+// Helper: log an activity
 async function logActivity(
   teamId: string,
   userId: string,
-  userName: string,
   action: string,
-  target: string,
-  type: string
+  entityType: string,
+  entityId?: string,
+  metadata?: Record<string, any>
 ) {
   try {
-    const existing = ((await kv.get(`activities:${teamId}`)) as any[] | null) || [];
-    const activity = {
-      id: `act_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
-      teamId,
-      userId,
-      userName,
+    await supabaseAdmin.from("activities").insert({
+      team_id: teamId,
+      user_id: userId,
       action,
-      target,
-      type,
-      createdAt: new Date().toISOString(),
-    };
-    const updated = [activity, ...existing].slice(0, 100);
-    await kv.set(`activities:${teamId}`, updated);
+      entity_type: entityType,
+      entity_id: entityId,
+      metadata: metadata || {},
+    });
   } catch (err) {
     console.log(`Log activity error: ${err}`);
   }
@@ -154,7 +121,7 @@ app.post("/make-server-7d783630/auth/signup", async (c) => {
 });
 
 app.post("/make-server-7d783630/auth/change-password", async (c) => {
-  const user = await getAuthUser(c);
+  const user = getAuthUser(c);
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { newPassword } = await c.req.json();
@@ -174,13 +141,26 @@ app.post("/make-server-7d783630/auth/change-password", async (c) => {
 
 // ─── Teams ─────────────────────────────────────────────────────────────────────
 app.get("/make-server-7d783630/teams", async (c) => {
-  const user = await getAuthUser(c);
+  const user = getAuthUser(c);
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
-    const teamIds = (await kv.get(`user_teams:${user.id}`)) as string[] | null;
-    if (!teamIds || teamIds.length === 0) return c.json({ teams: [] });
-    const teams = await kv.mget(teamIds.map((id) => `team:${id}`));
-    return c.json({ teams: teams.filter(Boolean) });
+    // Get teams where user is a member
+    const { data: memberships, error: memberError } = await supabaseAdmin
+      .from("team_members")
+      .select("team_id")
+      .eq("user_id", user.id);
+
+    if (memberError) throw memberError;
+    if (!memberships || memberships.length === 0) return c.json({ teams: [] });
+
+    const teamIds = memberships.map((m) => m.team_id);
+    const { data: teams, error: teamsError } = await supabaseAdmin
+      .from("teams")
+      .select("*")
+      .in("id", teamIds);
+
+    if (teamsError) throw teamsError;
+    return c.json({ teams: teams || [] });
   } catch (err) {
     console.log(`Get teams error: ${err}`);
     return c.json({ error: "Failed to get teams" }, 500);
@@ -188,31 +168,26 @@ app.get("/make-server-7d783630/teams", async (c) => {
 });
 
 app.post("/make-server-7d783630/teams", async (c) => {
-  const user = await getAuthUser(c);
+  const user = getAuthUser(c);
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { name, color } = await c.req.json();
     if (!name?.trim()) return c.json({ error: "Team name is required" }, 400);
-    const teamId = `t_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    const team = { id: teamId, name: name.trim(), color: color || "#f59e0b", ownerId: user.id };
-    await kv.set(`team:${teamId}`, team);
 
-    const userName = user.user_metadata?.name || user.email?.split("@")[0] || "User";
-    const member = {
-      id: user.id,
-      teamId,
-      name: userName,
-      email: user.email,
-      avatar: getInitials(userName),
-      role: "Owner",
-      status: "Available",
-    };
-    await kv.set(`member:${teamId}:${user.id}`, member);
+    // Create team (trigger will auto-add creator as owner)
+    const { data: team, error } = await supabaseAdmin
+      .from("teams")
+      .insert({
+        name: name.trim(),
+        color: color || "#f59e0b",
+        created_by: user.id,
+      })
+      .select()
+      .single();
 
-    const existingIds = ((await kv.get(`user_teams:${user.id}`)) as string[] | null) || [];
-    await kv.set(`user_teams:${user.id}`, [...existingIds, teamId]);
+    if (error) throw error;
 
-    await logActivity(teamId, user.id, userName, "created team", name.trim(), "team");
+    await logActivity(team.id, user.id, "created team", "team", team.id, { name: team.name });
     return c.json({ team });
   } catch (err) {
     console.log(`Create team error: ${err}`);
@@ -221,16 +196,21 @@ app.post("/make-server-7d783630/teams", async (c) => {
 });
 
 app.put("/make-server-7d783630/teams/:teamId", async (c) => {
-  const user = await getAuthUser(c);
+  const user = getAuthUser(c);
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { teamId } = c.req.param();
     const updates = await c.req.json();
-    const existing = (await kv.get(`team:${teamId}`)) as any;
-    if (!existing) return c.json({ error: "Team not found" }, 404);
-    const updated = { ...existing, ...updates };
-    await kv.set(`team:${teamId}`, updated);
-    return c.json({ team: updated });
+
+    const { data: team, error } = await supabaseAdmin
+      .from("teams")
+      .update({ name: updates.name, color: updates.color })
+      .eq("id", teamId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return c.json({ team });
   } catch (err) {
     console.log(`Update team error: ${err}`);
     return c.json({ error: "Failed to update team" }, 500);
@@ -239,12 +219,38 @@ app.put("/make-server-7d783630/teams/:teamId", async (c) => {
 
 // ─── Members ───────────────────────────────────────────────────────────────────
 app.get("/make-server-7d783630/teams/:teamId/members", async (c) => {
-  const user = await getAuthUser(c);
+  const user = getAuthUser(c);
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { teamId } = c.req.param();
-    const members = await kv.getByPrefix(`member:${teamId}:`);
-    return c.json({ members: members.filter(Boolean) });
+
+    const { data: members, error } = await supabaseAdmin
+      .from("team_members")
+      .select(`
+        id,
+        team_id,
+        user_id,
+        role,
+        joined_at,
+        profiles:user_id (id, name, email, avatar_url)
+      `)
+      .eq("team_id", teamId);
+
+    if (error) throw error;
+
+    // Transform to expected format
+    const formatted = (members || []).map((m: any) => ({
+      id: m.user_id,
+      odid: m.id,
+      teamId: m.team_id,
+      name: m.profiles?.name || "Unknown",
+      email: m.profiles?.email || "",
+      avatar: m.profiles?.avatar_url || getInitials(m.profiles?.name || "U"),
+      role: m.role === "owner" ? "Owner" : m.role === "admin" ? "Admin" : "Member",
+      status: "Available",
+    }));
+
+    return c.json({ members: formatted });
   } catch (err) {
     console.log(`Get members error: ${err}`);
     return c.json({ error: "Failed to get members" }, 500);
@@ -252,55 +258,68 @@ app.get("/make-server-7d783630/teams/:teamId/members", async (c) => {
 });
 
 app.post("/make-server-7d783630/teams/:teamId/members", async (c) => {
-  const user = await getAuthUser(c);
+  const user = getAuthUser(c);
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { teamId } = c.req.param();
-    const { name, email, role, status, userId } = await c.req.json();
-    if (!name?.trim() || !email?.trim()) {
-      return c.json({ error: "Name and email are required" }, 400);
+    const { email, role } = await c.req.json();
+
+    if (!email?.trim()) {
+      return c.json({ error: "Email is required" }, 400);
     }
-    const memberId = `m_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+    // Find user by email
+    const { data: users, error: usersError } = await supabaseAdmin.auth.admin.listUsers();
+    if (usersError) throw usersError;
+
+    const foundUser = users.users.find((u: any) => u.email?.toLowerCase() === email.toLowerCase());
+    if (!foundUser) {
+      return c.json({ error: "User not found. They must sign up first." }, 404);
+    }
+
+    // Check if already a member
+    const { data: existing } = await supabaseAdmin
+      .from("team_members")
+      .select("id")
+      .eq("team_id", teamId)
+      .eq("user_id", foundUser.id)
+      .single();
+
+    if (existing) {
+      return c.json({ error: "User is already a team member" }, 400);
+    }
+
+    // Add as member
+    const { data: membership, error } = await supabaseAdmin
+      .from("team_members")
+      .insert({
+        team_id: teamId,
+        user_id: foundUser.id,
+        role: role?.toLowerCase() || "member",
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    const profile = await supabaseAdmin
+      .from("profiles")
+      .select("*")
+      .eq("id", foundUser.id)
+      .single();
+
     const member = {
-      id: memberId,
+      id: foundUser.id,
+      odid: membership.id,
       teamId,
-      name: name.trim(),
-      email: email.trim(),
-      avatar: getInitials(name.trim()),
+      name: profile.data?.name || foundUser.email?.split("@")[0] || "User",
+      email: foundUser.email,
+      avatar: profile.data?.avatar_url || getInitials(profile.data?.name || "U"),
       role: role || "Member",
-      status: status || "Offline",
+      status: "Available",
     };
-    await kv.set(`member:${teamId}:${memberId}`, member);
-    
-    // Look up user by email from Supabase auth and add team to their user_teams list
-    let userIdToAdd = userId;
-    if (!userIdToAdd) {
-      try {
-        const { data: users, error } = await supabaseAdmin.auth.admin.listUsers();
-        if (!error && users) {
-          const foundUser = users.users.find((u: any) => u.email?.toLowerCase() === email.toLowerCase());
-          if (foundUser) {
-            userIdToAdd = foundUser.id;
-            console.log(`[v0] Found user by email: ${email} -> ${userIdToAdd}`);
-          }
-        }
-      } catch (e) {
-        console.log(`[v0] Failed to look up user by email: ${e}`);
-      }
-    }
-    
-    if (userIdToAdd) {
-      const existingIds = ((await kv.get(`user_teams:${userIdToAdd}`)) as string[] | null) || [];
-      if (!existingIds.includes(teamId)) {
-        await kv.set(`user_teams:${userIdToAdd}`, [...existingIds, teamId]);
-        console.log(`[v0] Added team ${teamId} to user ${userIdToAdd}`);
-      }
-    } else {
-      console.log(`[v0] Could not find user ID for email: ${email}`);
-    }
-    
-    const actorName = user.user_metadata?.name || user.email?.split("@")[0] || "User";
-    await logActivity(teamId, user.id, actorName, "added member", name.trim(), "member");
+
+    await logActivity(teamId, user.id, "added member", "member", foundUser.id, { name: member.name });
     return c.json({ member });
   } catch (err) {
     console.log(`Add member error: ${err}`);
@@ -308,31 +327,53 @@ app.post("/make-server-7d783630/teams/:teamId/members", async (c) => {
   }
 });
 
-app.put("/make-server-7d783630/teams/:teamId/members/:memberId", async (c) => {
-  const user = await getAuthUser(c);
+app.delete("/make-server-7d783630/teams/:teamId/members/:memberId", async (c) => {
+  const user = getAuthUser(c);
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { teamId, memberId } = c.req.param();
-    const updates = await c.req.json();
-    const existing = (await kv.get(`member:${teamId}:${memberId}`)) as any;
-    if (!existing) return c.json({ error: "Member not found" }, 404);
-    const updated = { ...existing, ...updates };
-    await kv.set(`member:${teamId}:${memberId}`, updated);
-    return c.json({ member: updated });
+
+    const { error } = await supabaseAdmin
+      .from("team_members")
+      .delete()
+      .eq("team_id", teamId)
+      .eq("user_id", memberId);
+
+    if (error) throw error;
+    return c.json({ success: true });
   } catch (err) {
-    console.log(`Update member error: ${err}`);
-    return c.json({ error: "Failed to update member" }, 500);
+    console.log(`Remove member error: ${err}`);
+    return c.json({ error: "Failed to remove member" }, 500);
   }
 });
 
 // ─── Projects ──────────────────────────────────────────────────────────────────
 app.get("/make-server-7d783630/teams/:teamId/projects", async (c) => {
-  const user = await getAuthUser(c);
+  const user = getAuthUser(c);
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { teamId } = c.req.param();
-    const projects = await kv.getByPrefix(`project:${teamId}:`);
-    return c.json({ projects: projects.filter(Boolean) });
+
+    const { data: projects, error } = await supabaseAdmin
+      .from("projects")
+      .select("*")
+      .eq("team_id", teamId)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    // Transform to expected format
+    const formatted = (projects || []).map((p: any) => ({
+      id: p.id,
+      teamId: p.team_id,
+      name: p.name,
+      description: p.description,
+      status: p.status,
+      color: p.color,
+      createdAt: p.created_at,
+    }));
+
+    return c.json({ projects: formatted });
   } catch (err) {
     console.log(`Get projects error: ${err}`);
     return c.json({ error: "Failed to get projects" }, 500);
@@ -340,17 +381,39 @@ app.get("/make-server-7d783630/teams/:teamId/projects", async (c) => {
 });
 
 app.post("/make-server-7d783630/teams/:teamId/projects", async (c) => {
-  const user = await getAuthUser(c);
+  const user = getAuthUser(c);
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { teamId } = c.req.param();
     const body = await c.req.json();
-    const projectId = `p_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    const project = { ...body, id: projectId, teamId, createdAt: new Date().toISOString() };
-    await kv.set(`project:${teamId}:${projectId}`, project);
-    const actorName = user.user_metadata?.name || user.email?.split("@")[0] || "User";
-    await logActivity(teamId, user.id, actorName, "created project", body.name || "Untitled", "project");
-    return c.json({ project });
+
+    const { data: project, error } = await supabaseAdmin
+      .from("projects")
+      .insert({
+        team_id: teamId,
+        name: body.name,
+        description: body.description,
+        status: body.status || "active",
+        color: body.color || "#3b82f6",
+        created_by: user.id,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    const formatted = {
+      id: project.id,
+      teamId: project.team_id,
+      name: project.name,
+      description: project.description,
+      status: project.status,
+      color: project.color,
+      createdAt: project.created_at,
+    };
+
+    await logActivity(teamId, user.id, "created project", "project", project.id, { name: project.name });
+    return c.json({ project: formatted });
   } catch (err) {
     console.log(`Create project error: ${err}`);
     return c.json({ error: "Failed to create project" }, 500);
@@ -358,31 +421,59 @@ app.post("/make-server-7d783630/teams/:teamId/projects", async (c) => {
 });
 
 app.put("/make-server-7d783630/teams/:teamId/projects/:projectId", async (c) => {
-  const user = await getAuthUser(c);
+  const user = getAuthUser(c);
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { teamId, projectId } = c.req.param();
     const updates = await c.req.json();
-    const existing = (await kv.get(`project:${teamId}:${projectId}`)) as any;
-    if (!existing) return c.json({ error: "Project not found" }, 404);
-    const updated = { ...existing, ...updates };
-    await kv.set(`project:${teamId}:${projectId}`, updated);
-    return c.json({ project: updated });
+
+    const { data: project, error } = await supabaseAdmin
+      .from("projects")
+      .update({
+        name: updates.name,
+        description: updates.description,
+        status: updates.status,
+        color: updates.color,
+      })
+      .eq("id", projectId)
+      .eq("team_id", teamId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    const formatted = {
+      id: project.id,
+      teamId: project.team_id,
+      name: project.name,
+      description: project.description,
+      status: project.status,
+      color: project.color,
+      createdAt: project.created_at,
+    };
+
+    return c.json({ project: formatted });
   } catch (err) {
     console.log(`Update project error: ${err}`);
     return c.json({ error: "Failed to update project" }, 500);
   }
 });
 
-// ─── Delete Project ────────────────────────────────────────────────────────────
 app.delete("/make-server-7d783630/teams/:teamId/projects/:projectId", async (c) => {
   const user = getAuthUser(c);
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { teamId, projectId } = c.req.param();
-    await kv.del(`project:${teamId}:${projectId}`);
-    const actorName = user.user_metadata?.name || user.email?.split("@")[0] || "User";
-    await logActivity(teamId, user.id, actorName, "deleted project", projectId, "project");
+
+    const { error } = await supabaseAdmin
+      .from("projects")
+      .delete()
+      .eq("id", projectId)
+      .eq("team_id", teamId);
+
+    if (error) throw error;
+
+    await logActivity(teamId, user.id, "deleted project", "project", projectId);
     return c.json({ success: true });
   } catch (err) {
     console.log(`Delete project error: ${err}`);
@@ -392,12 +483,39 @@ app.delete("/make-server-7d783630/teams/:teamId/projects/:projectId", async (c) 
 
 // ─── Tasks ─────────────────────────────────────────────────────────────────────
 app.get("/make-server-7d783630/teams/:teamId/tasks", async (c) => {
-  const user = await getAuthUser(c);
+  const user = getAuthUser(c);
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { teamId } = c.req.param();
-    const tasks = await kv.getByPrefix(`task:${teamId}:`);
-    return c.json({ tasks: tasks.filter(Boolean) });
+
+    const { data: tasks, error } = await supabaseAdmin
+      .from("tasks")
+      .select(`
+        *,
+        assignee:assignee_id (id, name, email, avatar_url)
+      `)
+      .eq("team_id", teamId)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    // Transform to expected format
+    const formatted = (tasks || []).map((t: any) => ({
+      id: t.id,
+      teamId: t.team_id,
+      projectId: t.project_id,
+      title: t.title,
+      description: t.description,
+      status: t.status,
+      priority: t.priority,
+      assigneeId: t.assignee_id,
+      assigneeName: t.assignee?.name,
+      dueDate: t.due_date,
+      createdAt: t.created_at,
+      comments: [], // Comments stored separately or in metadata
+    }));
+
+    return c.json({ tasks: formatted });
   } catch (err) {
     console.log(`Get tasks error: ${err}`);
     return c.json({ error: "Failed to get tasks" }, 500);
@@ -405,17 +523,46 @@ app.get("/make-server-7d783630/teams/:teamId/tasks", async (c) => {
 });
 
 app.post("/make-server-7d783630/teams/:teamId/tasks", async (c) => {
-  const user = await getAuthUser(c);
+  const user = getAuthUser(c);
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { teamId } = c.req.param();
     const body = await c.req.json();
-    const taskId = `tk_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    const task = { ...body, id: taskId, teamId, comments: [], createdAt: new Date().toISOString() };
-    await kv.set(`task:${teamId}:${taskId}`, task);
-    const actorName = user.user_metadata?.name || user.email?.split("@")[0] || "User";
-    await logActivity(teamId, user.id, actorName, "created task", body.title || "Untitled", "task");
-    return c.json({ task });
+
+    const { data: task, error } = await supabaseAdmin
+      .from("tasks")
+      .insert({
+        team_id: teamId,
+        project_id: body.projectId || null,
+        title: body.title,
+        description: body.description,
+        status: body.status || "todo",
+        priority: body.priority || "medium",
+        assignee_id: body.assigneeId || null,
+        due_date: body.dueDate || null,
+        created_by: user.id,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    const formatted = {
+      id: task.id,
+      teamId: task.team_id,
+      projectId: task.project_id,
+      title: task.title,
+      description: task.description,
+      status: task.status,
+      priority: task.priority,
+      assigneeId: task.assignee_id,
+      dueDate: task.due_date,
+      createdAt: task.created_at,
+      comments: [],
+    };
+
+    await logActivity(teamId, user.id, "created task", "task", task.id, { title: task.title });
+    return c.json({ task: formatted });
   } catch (err) {
     console.log(`Create task error: ${err}`);
     return c.json({ error: "Failed to create task" }, 500);
@@ -423,24 +570,52 @@ app.post("/make-server-7d783630/teams/:teamId/tasks", async (c) => {
 });
 
 app.put("/make-server-7d783630/teams/:teamId/tasks/:taskId", async (c) => {
-  const user = await getAuthUser(c);
+  const user = getAuthUser(c);
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { teamId, taskId } = c.req.param();
     const updates = await c.req.json();
-    const existing = (await kv.get(`task:${teamId}:${taskId}`)) as any;
-    if (!existing) return c.json({ error: "Task not found" }, 404);
-    const updated = { ...existing, ...updates };
-    await kv.set(`task:${teamId}:${taskId}`, updated);
-    const actorName = user.user_metadata?.name || user.email?.split("@")[0] || "User";
-    if (updates.status === "completed") {
-      await logActivity(teamId, user.id, actorName, "completed task", existing.title || "Untitled", "task");
-    } else if (updates.submittedLink) {
-      await logActivity(teamId, user.id, actorName, "submitted work for", existing.title || "Untitled", "submit");
+
+    const updateData: any = {};
+    if (updates.title !== undefined) updateData.title = updates.title;
+    if (updates.description !== undefined) updateData.description = updates.description;
+    if (updates.status !== undefined) updateData.status = updates.status;
+    if (updates.priority !== undefined) updateData.priority = updates.priority;
+    if (updates.assigneeId !== undefined) updateData.assignee_id = updates.assigneeId;
+    if (updates.dueDate !== undefined) updateData.due_date = updates.dueDate;
+    if (updates.projectId !== undefined) updateData.project_id = updates.projectId;
+
+    const { data: task, error } = await supabaseAdmin
+      .from("tasks")
+      .update(updateData)
+      .eq("id", taskId)
+      .eq("team_id", teamId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    const formatted = {
+      id: task.id,
+      teamId: task.team_id,
+      projectId: task.project_id,
+      title: task.title,
+      description: task.description,
+      status: task.status,
+      priority: task.priority,
+      assigneeId: task.assignee_id,
+      dueDate: task.due_date,
+      createdAt: task.created_at,
+      comments: [],
+    };
+
+    if (updates.status === "done") {
+      await logActivity(teamId, user.id, "completed task", "task", task.id, { title: task.title });
     } else {
-      await logActivity(teamId, user.id, actorName, "updated task", existing.title || "Untitled", "task");
+      await logActivity(teamId, user.id, "updated task", "task", task.id, { title: task.title });
     }
-    return c.json({ task: updated });
+
+    return c.json({ task: formatted });
   } catch (err) {
     console.log(`Update task error: ${err}`);
     return c.json({ error: "Failed to update task" }, 500);
@@ -448,11 +623,18 @@ app.put("/make-server-7d783630/teams/:teamId/tasks/:taskId", async (c) => {
 });
 
 app.delete("/make-server-7d783630/teams/:teamId/tasks/:taskId", async (c) => {
-  const user = await getAuthUser(c);
+  const user = getAuthUser(c);
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { teamId, taskId } = c.req.param();
-    await kv.del(`task:${teamId}:${taskId}`);
+
+    const { error } = await supabaseAdmin
+      .from("tasks")
+      .delete()
+      .eq("id", taskId)
+      .eq("team_id", teamId);
+
+    if (error) throw error;
     return c.json({ success: true });
   } catch (err) {
     console.log(`Delete task error: ${err}`);
@@ -460,80 +642,34 @@ app.delete("/make-server-7d783630/teams/:teamId/tasks/:taskId", async (c) => {
   }
 });
 
-app.post("/make-server-7d783630/teams/:teamId/tasks/:taskId/comments", async (c) => {
-  const user = await getAuthUser(c);
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-  try {
-    const { teamId, taskId } = c.req.param();
-    const { content } = await c.req.json();
-    if (!content?.trim()) return c.json({ error: "Content is required" }, 400);
-
-    const userName = user.user_metadata?.name || user.email?.split("@")[0] || "User";
-    const comment = {
-      id: `tc_${Date.now()}`,
-      authorId: user.id,
-      authorName: userName,
-      content: content.trim(),
-      createdAt: new Date().toISOString(),
-    };
-    const existing = (await kv.get(`task:${teamId}:${taskId}`)) as any;
-    if (!existing) return c.json({ error: "Task not found" }, 404);
-    const updated = { ...existing, comments: [...(existing.comments || []), comment] };
-    await kv.set(`task:${teamId}:${taskId}`, updated);
-    await logActivity(teamId, user.id, userName, "commented on task", existing.title || "Untitled", "comment");
-    return c.json({ comment, task: updated });
-  } catch (err) {
-    console.log(`Add task comment error: ${err}`);
-    return c.json({ error: "Failed to add comment" }, 500);
-  }
-});
-
-// ─── Edit / Delete Task Comment ───────────────────────────────────────────────
-app.put("/make-server-7d783630/teams/:teamId/tasks/:taskId/comments/:commentId", async (c) => {
-  const user = getAuthUser(c);
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-  try {
-    const { teamId, taskId, commentId } = c.req.param();
-    const { content } = await c.req.json();
-    const existing = (await kv.get(`task:${teamId}:${taskId}`)) as any;
-    if (!existing) return c.json({ error: "Task not found" }, 404);
-    const comments = (existing.comments || []).map((c: any) =>
-      c.id === commentId && c.authorId === user.id ? { ...c, content, editedAt: new Date().toISOString() } : c
-    );
-    const updated = { ...existing, comments };
-    await kv.set(`task:${teamId}:${taskId}`, updated);
-    return c.json({ task: updated });
-  } catch (err) {
-    console.log(`Edit task comment error: ${err}`);
-    return c.json({ error: "Failed to edit comment" }, 500);
-  }
-});
-
-app.delete("/make-server-7d783630/teams/:teamId/tasks/:taskId/comments/:commentId", async (c) => {
-  const user = getAuthUser(c);
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-  try {
-    const { teamId, taskId, commentId } = c.req.param();
-    const existing = (await kv.get(`task:${teamId}:${taskId}`)) as any;
-    if (!existing) return c.json({ error: "Task not found" }, 404);
-    const comments = (existing.comments || []).filter((c: any) => !(c.id === commentId && c.authorId === user.id));
-    const updated = { ...existing, comments };
-    await kv.set(`task:${teamId}:${taskId}`, updated);
-    return c.json({ task: updated });
-  } catch (err) {
-    console.log(`Delete task comment error: ${err}`);
-    return c.json({ error: "Failed to delete comment" }, 500);
-  }
-});
-
 // ─── Calendar Events ───────────────────────────────────────────────────────────
 app.get("/make-server-7d783630/teams/:teamId/events", async (c) => {
-  const user = await getAuthUser(c);
+  const user = getAuthUser(c);
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { teamId } = c.req.param();
-    const events = await kv.getByPrefix(`event:${teamId}:`);
-    return c.json({ events: events.filter(Boolean) });
+
+    const { data: events, error } = await supabaseAdmin
+      .from("events")
+      .select("*")
+      .eq("team_id", teamId)
+      .order("start_time", { ascending: true });
+
+    if (error) throw error;
+
+    const formatted = (events || []).map((e: any) => ({
+      id: e.id,
+      teamId: e.team_id,
+      title: e.title,
+      description: e.description,
+      start: e.start_time,
+      end: e.end_time,
+      location: e.location,
+      color: e.color,
+      createdAt: e.created_at,
+    }));
+
+    return c.json({ events: formatted });
   } catch (err) {
     console.log(`Get events error: ${err}`);
     return c.json({ error: "Failed to get events" }, 500);
@@ -541,29 +677,106 @@ app.get("/make-server-7d783630/teams/:teamId/events", async (c) => {
 });
 
 app.post("/make-server-7d783630/teams/:teamId/events", async (c) => {
-  const user = await getAuthUser(c);
+  const user = getAuthUser(c);
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { teamId } = c.req.param();
     const body = await c.req.json();
-    const eventId = `e_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    const event = { ...body, id: eventId, teamId, createdAt: new Date().toISOString() };
-    await kv.set(`event:${teamId}:${eventId}`, event);
-    const actorName = user.user_metadata?.name || user.email?.split("@")[0] || "User";
-    await logActivity(teamId, user.id, actorName, "created event", body.title || "Untitled", "event");
-    return c.json({ event });
+
+    const { data: event, error } = await supabaseAdmin
+      .from("events")
+      .insert({
+        team_id: teamId,
+        title: body.title,
+        description: body.description,
+        start_time: body.start,
+        end_time: body.end,
+        location: body.location,
+        color: body.color || "#3b82f6",
+        created_by: user.id,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    const formatted = {
+      id: event.id,
+      teamId: event.team_id,
+      title: event.title,
+      description: event.description,
+      start: event.start_time,
+      end: event.end_time,
+      location: event.location,
+      color: event.color,
+      createdAt: event.created_at,
+    };
+
+    await logActivity(teamId, user.id, "created event", "event", event.id, { title: event.title });
+    return c.json({ event: formatted });
   } catch (err) {
     console.log(`Create event error: ${err}`);
     return c.json({ error: "Failed to create event" }, 500);
   }
 });
 
-app.delete("/make-server-7d783630/teams/:teamId/events/:eventId", async (c) => {
-  const user = await getAuthUser(c);
+app.put("/make-server-7d783630/teams/:teamId/events/:eventId", async (c) => {
+  const user = getAuthUser(c);
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { teamId, eventId } = c.req.param();
-    await kv.del(`event:${teamId}:${eventId}`);
+    const updates = await c.req.json();
+
+    const updateData: any = {};
+    if (updates.title !== undefined) updateData.title = updates.title;
+    if (updates.description !== undefined) updateData.description = updates.description;
+    if (updates.start !== undefined) updateData.start_time = updates.start;
+    if (updates.end !== undefined) updateData.end_time = updates.end;
+    if (updates.location !== undefined) updateData.location = updates.location;
+    if (updates.color !== undefined) updateData.color = updates.color;
+
+    const { data: event, error } = await supabaseAdmin
+      .from("events")
+      .update(updateData)
+      .eq("id", eventId)
+      .eq("team_id", teamId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    const formatted = {
+      id: event.id,
+      teamId: event.team_id,
+      title: event.title,
+      description: event.description,
+      start: event.start_time,
+      end: event.end_time,
+      location: event.location,
+      color: event.color,
+      createdAt: event.created_at,
+    };
+
+    return c.json({ event: formatted });
+  } catch (err) {
+    console.log(`Update event error: ${err}`);
+    return c.json({ error: "Failed to update event" }, 500);
+  }
+});
+
+app.delete("/make-server-7d783630/teams/:teamId/events/:eventId", async (c) => {
+  const user = getAuthUser(c);
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    const { teamId, eventId } = c.req.param();
+
+    const { error } = await supabaseAdmin
+      .from("events")
+      .delete()
+      .eq("id", eventId)
+      .eq("team_id", teamId);
+
+    if (error) throw error;
     return c.json({ success: true });
   } catch (err) {
     console.log(`Delete event error: ${err}`);
@@ -571,32 +784,39 @@ app.delete("/make-server-7d783630/teams/:teamId/events/:eventId", async (c) => {
   }
 });
 
-// ─── Update Event ─────────────────────────────────────────────────────────────
-app.put("/make-server-7d783630/teams/:teamId/events/:eventId", async (c) => {
+// ─── Announcements ─────────────────────────────────────────────────────────────
+app.get("/make-server-7d783630/teams/:teamId/announcements", async (c) => {
   const user = getAuthUser(c);
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
-    const { teamId, eventId } = c.req.param();
-    const updates = await c.req.json();
-    const existing = (await kv.get(`event:${teamId}:${eventId}`)) as any;
-    if (!existing) return c.json({ error: "Event not found" }, 404);
-    const updated = { ...existing, ...updates };
-    await kv.set(`event:${teamId}:${eventId}`, updated);
-    return c.json({ event: updated });
-  } catch (err) {
-    console.log(`Update event error: ${err}`);
-    return c.json({ error: "Failed to update event" }, 500);
-  }
-});
-
-// ─── Announcements ─────────────────────────────────────────────────────────────
-app.get("/make-server-7d783630/teams/:teamId/announcements", async (c) => {
-  const user = await getAuthUser(c);
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-  try {
     const { teamId } = c.req.param();
-    const announcements = await kv.getByPrefix(`announcement:${teamId}:`);
-    return c.json({ announcements: announcements.filter(Boolean) });
+
+    const { data: announcements, error } = await supabaseAdmin
+      .from("announcements")
+      .select(`
+        *,
+        author:created_by (id, name, email, avatar_url)
+      `)
+      .eq("team_id", teamId)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    const formatted = (announcements || []).map((a: any) => ({
+      id: a.id,
+      teamId: a.team_id,
+      title: a.title,
+      content: a.content,
+      priority: a.priority,
+      pinned: a.pinned,
+      authorId: a.created_by,
+      authorName: a.author?.name || "Unknown",
+      likes: [],
+      comments: [],
+      createdAt: a.created_at,
+    }));
+
+    return c.json({ announcements: formatted });
   } catch (err) {
     console.log(`Get announcements error: ${err}`);
     return c.json({ error: "Failed to get announcements" }, 500);
@@ -604,134 +824,99 @@ app.get("/make-server-7d783630/teams/:teamId/announcements", async (c) => {
 });
 
 app.post("/make-server-7d783630/teams/:teamId/announcements", async (c) => {
-  const user = await getAuthUser(c);
+  const user = getAuthUser(c);
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { teamId } = c.req.param();
     const body = await c.req.json();
-    const annId = `a_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    const userName = user.user_metadata?.name || user.email?.split("@")[0] || "User";
-    const announcement = {
-      ...body,
-      id: annId,
-      teamId,
-      authorId: user.id,
-      authorName: userName,
-      pinned: false,
+
+    const { data: announcement, error } = await supabaseAdmin
+      .from("announcements")
+      .insert({
+        team_id: teamId,
+        title: body.title || "",
+        content: body.content,
+        priority: body.priority || "normal",
+        pinned: false,
+        created_by: user.id,
+      })
+      .select(`
+        *,
+        author:created_by (id, name, email, avatar_url)
+      `)
+      .single();
+
+    if (error) throw error;
+
+    const formatted = {
+      id: announcement.id,
+      teamId: announcement.team_id,
+      title: announcement.title,
+      content: announcement.content,
+      priority: announcement.priority,
+      pinned: announcement.pinned,
+      authorId: announcement.created_by,
+      authorName: announcement.author?.name || "Unknown",
       likes: [],
       comments: [],
-      createdAt: new Date().toISOString(),
+      createdAt: announcement.created_at,
     };
-    await kv.set(`announcement:${teamId}:${annId}`, announcement);
-    await logActivity(teamId, user.id, userName, "posted announcement", (body.content || "").slice(0, 60), "announcement");
-    return c.json({ announcement });
+
+    await logActivity(teamId, user.id, "posted announcement", "announcement", announcement.id);
+    return c.json({ announcement: formatted });
   } catch (err) {
     console.log(`Create announcement error: ${err}`);
     return c.json({ error: "Failed to create announcement" }, 500);
   }
 });
 
-app.post("/make-server-7d783630/teams/:teamId/announcements/:annId/like", async (c) => {
-  const user = await getAuthUser(c);
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-  try {
-    const { teamId, annId } = c.req.param();
-    const existing = (await kv.get(`announcement:${teamId}:${annId}`)) as any;
-    if (!existing) return c.json({ error: "Announcement not found" }, 404);
-    const liked = (existing.likes || []).includes(user.id);
-    const likes = liked
-      ? (existing.likes || []).filter((id: string) => id !== user.id)
-      : [...(existing.likes || []), user.id];
-    const updated = { ...existing, likes };
-    await kv.set(`announcement:${teamId}:${annId}`, updated);
-    return c.json({ announcement: updated });
-  } catch (err) {
-    console.log(`Toggle like error: ${err}`);
-    return c.json({ error: "Failed to toggle like" }, 500);
-  }
-});
-
 app.post("/make-server-7d783630/teams/:teamId/announcements/:annId/pin", async (c) => {
-  const user = await getAuthUser(c);
+  const user = getAuthUser(c);
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { teamId, annId } = c.req.param();
-    const existing = (await kv.get(`announcement:${teamId}:${annId}`)) as any;
-    if (!existing) return c.json({ error: "Announcement not found" }, 404);
-    const updated = { ...existing, pinned: !existing.pinned };
-    await kv.set(`announcement:${teamId}:${annId}`, updated);
-    const actorName = user.user_metadata?.name || user.email?.split("@")[0] || "User";
-    await logActivity(teamId, user.id, actorName, updated.pinned ? "pinned announcement" : "unpinned announcement", (existing.content || "").slice(0, 60), "announcement");
-    return c.json({ announcement: updated });
+
+    // Get current state
+    const { data: existing, error: fetchError } = await supabaseAdmin
+      .from("announcements")
+      .select("pinned")
+      .eq("id", annId)
+      .eq("team_id", teamId)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    const { data: announcement, error } = await supabaseAdmin
+      .from("announcements")
+      .update({ pinned: !existing.pinned })
+      .eq("id", annId)
+      .eq("team_id", teamId)
+      .select(`
+        *,
+        author:created_by (id, name, email, avatar_url)
+      `)
+      .single();
+
+    if (error) throw error;
+
+    const formatted = {
+      id: announcement.id,
+      teamId: announcement.team_id,
+      title: announcement.title,
+      content: announcement.content,
+      priority: announcement.priority,
+      pinned: announcement.pinned,
+      authorId: announcement.created_by,
+      authorName: announcement.author?.name || "Unknown",
+      likes: [],
+      comments: [],
+      createdAt: announcement.created_at,
+    };
+
+    return c.json({ announcement: formatted });
   } catch (err) {
     console.log(`Toggle pin error: ${err}`);
     return c.json({ error: "Failed to toggle pin" }, 500);
-  }
-});
-
-app.post("/make-server-7d783630/teams/:teamId/announcements/:annId/comments", async (c) => {
-  const user = await getAuthUser(c);
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-  try {
-    const { teamId, annId } = c.req.param();
-    const { content } = await c.req.json();
-    if (!content?.trim()) return c.json({ error: "Content is required" }, 400);
-
-    const userName = user.user_metadata?.name || user.email?.split("@")[0] || "User";
-    const comment = {
-      id: `ac_${Date.now()}`,
-      authorId: user.id,
-      authorName: userName,
-      content: content.trim(),
-      createdAt: new Date().toISOString(),
-    };
-    const existing = (await kv.get(`announcement:${teamId}:${annId}`)) as any;
-    if (!existing) return c.json({ error: "Announcement not found" }, 404);
-    const updated = { ...existing, comments: [...(existing.comments || []), comment] };
-    await kv.set(`announcement:${teamId}:${annId}`, updated);
-    await logActivity(teamId, user.id, userName, "replied to announcement", (existing.content || "").slice(0, 60), "comment");
-    return c.json({ comment, announcement: updated });
-  } catch (err) {
-    console.log(`Add announcement comment error: ${err}`);
-    return c.json({ error: "Failed to add comment" }, 500);
-  }
-});
-
-// ─── Poll Vote ─────────────────────────────────────────────────────────────────
-app.post("/make-server-7d783630/teams/:teamId/announcements/:annId/vote", async (c) => {
-  const user = getAuthUser(c);
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-  try {
-    const { teamId, annId } = c.req.param();
-    const { optionId } = await c.req.json();
-    const existing = (await kv.get(`announcement:${teamId}:${annId}`)) as any;
-    if (!existing) return c.json({ error: "Announcement not found" }, 404);
-    const pollVotes = { ...(existing.pollVotes || {}), [user.id]: optionId };
-    const updated = { ...existing, pollVotes };
-    await kv.set(`announcement:${teamId}:${annId}`, updated);
-    return c.json({ announcement: updated });
-  } catch (err) {
-    console.log(`Poll vote error: ${err}`);
-    return c.json({ error: "Failed to vote" }, 500);
-  }
-});
-
-// ─── Edit / Delete Announcement ────────────────────────────────────────────────
-app.put("/make-server-7d783630/teams/:teamId/announcements/:annId", async (c) => {
-  const user = getAuthUser(c);
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-  try {
-    const { teamId, annId } = c.req.param();
-    const { content } = await c.req.json();
-    const existing = (await kv.get(`announcement:${teamId}:${annId}`)) as any;
-    if (!existing) return c.json({ error: "Announcement not found" }, 404);
-    if (existing.authorId !== user.id) return c.json({ error: "Forbidden" }, 403);
-    const updated = { ...existing, content, editedAt: new Date().toISOString() };
-    await kv.set(`announcement:${teamId}:${annId}`, updated);
-    return c.json({ announcement: updated });
-  } catch (err) {
-    console.log(`Edit announcement error: ${err}`);
-    return c.json({ error: "Failed to edit announcement" }, 500);
   }
 });
 
@@ -740,10 +925,14 @@ app.delete("/make-server-7d783630/teams/:teamId/announcements/:annId", async (c)
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { teamId, annId } = c.req.param();
-    const existing = (await kv.get(`announcement:${teamId}:${annId}`)) as any;
-    if (!existing) return c.json({ error: "Announcement not found" }, 404);
-    if (existing.authorId !== user.id) return c.json({ error: "Forbidden" }, 403);
-    await kv.del(`announcement:${teamId}:${annId}`);
+
+    const { error } = await supabaseAdmin
+      .from("announcements")
+      .delete()
+      .eq("id", annId)
+      .eq("team_id", teamId);
+
+    if (error) throw error;
     return c.json({ success: true });
   } catch (err) {
     console.log(`Delete announcement error: ${err}`);
@@ -751,52 +940,36 @@ app.delete("/make-server-7d783630/teams/:teamId/announcements/:annId", async (c)
   }
 });
 
-// ─── Edit / Delete Announcement Comment ───────────────────────────────────────
-app.put("/make-server-7d783630/teams/:teamId/announcements/:annId/comments/:commentId", async (c) => {
-  const user = getAuthUser(c);
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-  try {
-    const { teamId, annId, commentId } = c.req.param();
-    const { content } = await c.req.json();
-    const existing = (await kv.get(`announcement:${teamId}:${annId}`)) as any;
-    if (!existing) return c.json({ error: "Announcement not found" }, 404);
-    const comments = (existing.comments || []).map((c: any) =>
-      c.id === commentId && c.authorId === user.id ? { ...c, content, editedAt: new Date().toISOString() } : c
-    );
-    const updated = { ...existing, comments };
-    await kv.set(`announcement:${teamId}:${annId}`, updated);
-    return c.json({ announcement: updated });
-  } catch (err) {
-    console.log(`Edit ann comment error: ${err}`);
-    return c.json({ error: "Failed to edit comment" }, 500);
-  }
-});
-
-app.delete("/make-server-7d783630/teams/:teamId/announcements/:annId/comments/:commentId", async (c) => {
-  const user = getAuthUser(c);
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-  try {
-    const { teamId, annId, commentId } = c.req.param();
-    const existing = (await kv.get(`announcement:${teamId}:${annId}`)) as any;
-    if (!existing) return c.json({ error: "Announcement not found" }, 404);
-    const comments = (existing.comments || []).filter((c: any) => !(c.id === commentId && c.authorId === user.id));
-    const updated = { ...existing, comments };
-    await kv.set(`announcement:${teamId}:${annId}`, updated);
-    return c.json({ announcement: updated });
-  } catch (err) {
-    console.log(`Delete ann comment error: ${err}`);
-    return c.json({ error: "Failed to delete comment" }, 500);
-  }
-});
-
-// ─── Team Messages (Chat) ─────────────────────────────────────────────────────
+// ─── Messages ──────────────────────────────────────────────────────────────────
 app.get("/make-server-7d783630/teams/:teamId/messages", async (c) => {
   const user = getAuthUser(c);
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { teamId } = c.req.param();
-    const messages = ((await kv.get(`messages:${teamId}`)) as any[] | null) || [];
-    return c.json({ messages });
+
+    const { data: messages, error } = await supabaseAdmin
+      .from("messages")
+      .select(`
+        *,
+        sender:sender_id (id, name, email, avatar_url)
+      `)
+      .eq("team_id", teamId)
+      .is("chat_group_id", null)
+      .order("created_at", { ascending: true })
+      .limit(200);
+
+    if (error) throw error;
+
+    const formatted = (messages || []).map((m: any) => ({
+      id: m.id,
+      teamId: m.team_id,
+      authorId: m.sender_id,
+      authorName: m.sender?.name || "Unknown",
+      content: m.content,
+      createdAt: m.created_at,
+    }));
+
+    return c.json({ messages: formatted });
   } catch (err) {
     console.log(`Get messages error: ${err}`);
     return c.json({ error: "Failed to get messages" }, 500);
@@ -809,76 +982,68 @@ app.post("/make-server-7d783630/teams/:teamId/messages", async (c) => {
   try {
     const { teamId } = c.req.param();
     const { content } = await c.req.json();
+
     if (!content?.trim()) return c.json({ error: "Content required" }, 400);
-    const userName = user.user_metadata?.name || user.email?.split("@")[0] || "User";
-    const message = {
-      id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
-      teamId,
-      authorId: user.id,
-      authorName: userName,
-      content: content.trim(),
-      createdAt: new Date().toISOString(),
+
+    const { data: message, error } = await supabaseAdmin
+      .from("messages")
+      .insert({
+        team_id: teamId,
+        sender_id: user.id,
+        content: content.trim(),
+      })
+      .select(`
+        *,
+        sender:sender_id (id, name, email, avatar_url)
+      `)
+      .single();
+
+    if (error) throw error;
+
+    const formatted = {
+      id: message.id,
+      teamId: message.team_id,
+      authorId: message.sender_id,
+      authorName: message.sender?.name || "Unknown",
+      content: message.content,
+      createdAt: message.created_at,
     };
-    const existing = ((await kv.get(`messages:${teamId}`)) as any[] | null) || [];
-    await kv.set(`messages:${teamId}`, [...existing, message].slice(-200));
-    return c.json({ message });
+
+    return c.json({ message: formatted });
   } catch (err) {
     console.log(`Send message error: ${err}`);
     return c.json({ error: "Failed to send message" }, 500);
   }
 });
 
-// ─── Edit / Delete Message ─────────────────────────────────────────────────────
-app.put("/make-server-7d783630/teams/:teamId/messages/:messageId", async (c) => {
-  const user = getAuthUser(c);
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-  try {
-    const { teamId, messageId } = c.req.param();
-    const { content, groupId } = await c.req.json();
-    const key = groupId ? `messages:${teamId}:${groupId}` : `messages:${teamId}`;
-    const messages = ((await kv.get(key)) as any[] | null) || [];
-    const updated = messages.map((m: any) =>
-      m.id === messageId && m.authorId === user.id
-        ? { ...m, content, editedAt: new Date().toISOString() }
-        : m
-    );
-    await kv.set(key, updated);
-    return c.json({ success: true });
-  } catch (err) {
-    return c.json({ error: "Failed to edit message" }, 500);
-  }
-});
-
-app.delete("/make-server-7d783630/teams/:teamId/messages/:messageId", async (c) => {
-  const user = getAuthUser(c);
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-  try {
-    const { teamId, messageId } = c.req.param();
-    const groupId = c.req.query("groupId");
-    const key = groupId ? `messages:${teamId}:${groupId}` : `messages:${teamId}`;
-    const messages = ((await kv.get(key)) as any[] | null) || [];
-    const updated = messages.map((m: any) =>
-      m.id === messageId && m.authorId === user.id
-        ? { ...m, deleted: true, content: "This message was deleted." }
-        : m
-    );
-    await kv.set(key, updated);
-    return c.json({ success: true });
-  } catch (err) {
-    return c.json({ error: "Failed to delete message" }, 500);
-  }
-});
-
-// ─── Chat Groups ──────────────────────────────────────────────────────────────
+// ─── Chat Groups ───────────────────────────────────────────────────────────────
 app.get("/make-server-7d783630/teams/:teamId/chat-groups", async (c) => {
   const user = getAuthUser(c);
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { teamId } = c.req.param();
-    const groups = ((await kv.get(`chat_groups:${teamId}`)) as any[] | null) || [];
-    const userGroups = groups.filter((g: any) => g.memberIds?.includes(user.id));
-    return c.json({ groups: userGroups });
+
+    const { data: groups, error } = await supabaseAdmin
+      .from("chat_groups")
+      .select("*")
+      .eq("team_id", teamId)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    const formatted = (groups || []).map((g: any) => ({
+      id: g.id,
+      teamId: g.team_id,
+      name: g.name,
+      description: g.description,
+      isDirect: g.is_direct,
+      createdBy: g.created_by,
+      createdAt: g.created_at,
+    }));
+
+    return c.json({ groups: formatted });
   } catch (err) {
+    console.log(`Get chat groups error: ${err}`);
     return c.json({ error: "Failed to get groups" }, 500);
   }
 });
@@ -888,14 +1053,33 @@ app.post("/make-server-7d783630/teams/:teamId/chat-groups", async (c) => {
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { teamId } = c.req.param();
-    const { name, memberIds } = await c.req.json();
-    const groupId = `grp_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
-    const allMembers = [...new Set([...(memberIds || []), user.id])];
-    const group = { id: groupId, teamId, name, memberIds: allMembers, createdBy: user.id, createdAt: new Date().toISOString() };
-    const existing = ((await kv.get(`chat_groups:${teamId}`)) as any[] | null) || [];
-    await kv.set(`chat_groups:${teamId}`, [...existing, group]);
-    return c.json({ group });
+    const { name } = await c.req.json();
+
+    const { data: group, error } = await supabaseAdmin
+      .from("chat_groups")
+      .insert({
+        team_id: teamId,
+        name: name || "New Group",
+        created_by: user.id,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    const formatted = {
+      id: group.id,
+      teamId: group.team_id,
+      name: group.name,
+      description: group.description,
+      isDirect: group.is_direct,
+      createdBy: group.created_by,
+      createdAt: group.created_at,
+    };
+
+    return c.json({ group: formatted });
   } catch (err) {
+    console.log(`Create chat group error: ${err}`);
     return c.json({ error: "Failed to create group" }, 500);
   }
 });
@@ -905,9 +1089,33 @@ app.get("/make-server-7d783630/teams/:teamId/chat-groups/:groupId/messages", asy
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { teamId, groupId } = c.req.param();
-    const messages = ((await kv.get(`messages:${teamId}:${groupId}`)) as any[] | null) || [];
-    return c.json({ messages });
+
+    const { data: messages, error } = await supabaseAdmin
+      .from("messages")
+      .select(`
+        *,
+        sender:sender_id (id, name, email, avatar_url)
+      `)
+      .eq("team_id", teamId)
+      .eq("chat_group_id", groupId)
+      .order("created_at", { ascending: true })
+      .limit(200);
+
+    if (error) throw error;
+
+    const formatted = (messages || []).map((m: any) => ({
+      id: m.id,
+      teamId: m.team_id,
+      groupId: m.chat_group_id,
+      authorId: m.sender_id,
+      authorName: m.sender?.name || "Unknown",
+      content: m.content,
+      createdAt: m.created_at,
+    }));
+
+    return c.json({ messages: formatted });
   } catch (err) {
+    console.log(`Get group messages error: ${err}`);
     return c.json({ error: "Failed to get group messages" }, 500);
   }
 });
@@ -918,29 +1126,73 @@ app.post("/make-server-7d783630/teams/:teamId/chat-groups/:groupId/messages", as
   try {
     const { teamId, groupId } = c.req.param();
     const { content } = await c.req.json();
+
     if (!content?.trim()) return c.json({ error: "Content required" }, 400);
-    const userName = user.user_metadata?.name || user.email?.split("@")[0] || "User";
-    const message = {
-      id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
-      teamId, groupId, authorId: user.id, authorName: userName,
-      content: content.trim(), createdAt: new Date().toISOString(),
+
+    const { data: message, error } = await supabaseAdmin
+      .from("messages")
+      .insert({
+        team_id: teamId,
+        chat_group_id: groupId,
+        sender_id: user.id,
+        content: content.trim(),
+      })
+      .select(`
+        *,
+        sender:sender_id (id, name, email, avatar_url)
+      `)
+      .single();
+
+    if (error) throw error;
+
+    const formatted = {
+      id: message.id,
+      teamId: message.team_id,
+      groupId: message.chat_group_id,
+      authorId: message.sender_id,
+      authorName: message.sender?.name || "Unknown",
+      content: message.content,
+      createdAt: message.created_at,
     };
-    const existing = ((await kv.get(`messages:${teamId}:${groupId}`)) as any[] | null) || [];
-    await kv.set(`messages:${teamId}:${groupId}`, [...existing, message].slice(-200));
-    return c.json({ message });
+
+    return c.json({ message: formatted });
   } catch (err) {
+    console.log(`Send group message error: ${err}`);
     return c.json({ error: "Failed to send group message" }, 500);
   }
 });
 
 // ─── Activities ────────────────────────────────────────────────────────────────
 app.get("/make-server-7d783630/teams/:teamId/activities", async (c) => {
-  const user = await getAuthUser(c);
+  const user = getAuthUser(c);
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   try {
     const { teamId } = c.req.param();
-    const activities = ((await kv.get(`activities:${teamId}`)) as any[] | null) || [];
-    return c.json({ activities });
+
+    const { data: activities, error } = await supabaseAdmin
+      .from("activities")
+      .select(`
+        *,
+        user:user_id (id, name, email, avatar_url)
+      `)
+      .eq("team_id", teamId)
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    if (error) throw error;
+
+    const formatted = (activities || []).map((a: any) => ({
+      id: a.id,
+      teamId: a.team_id,
+      userId: a.user_id,
+      userName: a.user?.name || "Unknown",
+      action: a.action,
+      target: a.metadata?.title || a.metadata?.name || a.entity_type,
+      type: a.entity_type,
+      createdAt: a.created_at,
+    }));
+
+    return c.json({ activities: formatted });
   } catch (err) {
     console.log(`Get activities error: ${err}`);
     return c.json({ error: "Failed to get activities" }, 500);
