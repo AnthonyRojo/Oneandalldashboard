@@ -180,6 +180,7 @@ interface AppContextType {
   currentMembers: TeamMember[];
   addMember: (member: Omit<TeamMember, "id" | "teamId">) => Promise<void>;
   updateMember: (id: string, updates: Partial<TeamMember>) => Promise<void>;
+  removeMember: (id: string) => Promise<void>;
 
   // Projects
   projects: Project[];
@@ -706,6 +707,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setMembers((prev) => prev.map((m) => (m.id === id ? { ...m, ...updates } : m)));
       const res = await api.updateMember(currentTeamId, id, updates, tokenRef.current);
       setMembers((prev) => prev.map((m) => (m.id === id ? res.member : m)));
+      // Realtime will auto-detect this change
+    },
+    [currentTeamId]
+  );
+
+  const removeMember = useCallback(
+    async (id: string) => {
+      if (!tokenRef.current || !currentTeamId) return;
+      setMembers((prev) => prev.filter((m) => m.id !== id));
+      await api.deleteMember(currentTeamId, id, tokenRef.current);
       // Realtime will auto-detect this change
     },
     [currentTeamId]
