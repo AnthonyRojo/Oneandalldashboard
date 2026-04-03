@@ -397,12 +397,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // ── Load teams ─────────────────────────────────────────────────────────────
   const loadUserTeams = useCallback(async (token: string) => {
     try {
+      console.log("[v0] Calling api.getTeams...");
       const res = await api.getTeams(token);
+      console.log("[v0] Teams response:", res);
       const userTeams: Team[] = res.teams || [];
+      console.log("[v0] User teams loaded:", userTeams.length, userTeams);
       setTeams(userTeams);
       return userTeams;
     } catch (err) {
-      console.log(`Load teams error: ${err}`);
+      console.log(`[v0] Load teams error: ${err}`);
       return [];
     }
   }, []);
