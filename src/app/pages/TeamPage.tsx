@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useApp, UserRole, Activity } from "../context/AppContext";
-import { UserPlus, Users, Activity as ActivityIcon, Crown, Shield, User, X, Mail, MoreHorizontal, CheckCircle, FolderOpen, MessageSquare, CalendarDays, Megaphone, LogIn, Trash2 } from "lucide-react";
+import { UserPlus, Users, Activity as ActivityIcon, Crown, Shield, User, X, Mail, MoreHorizontal, CheckCircle, FolderOpen, MessageSquare, CalendarDays, Megaphone, LogIn, ChevronDown } from "lucide-react";
 
 const ROLE_CONFIG: Record<UserRole, { color: string; bg: string; icon: typeof Crown }> = {
   Owner: { color: "#f59e0b", bg: "#fffbeb", icon: Crown },
@@ -8,7 +8,8 @@ const ROLE_CONFIG: Record<UserRole, { color: string; bg: string; icon: typeof Cr
   Member: { color: "#6b7280", bg: "#f3f4f6", icon: User },
 };
 
-const STATUS_COLORS = { Available: "#10b981", Busy: "#f59e0b", Away: "#6b7280", Offline: "#d1d5db" };
+const STATUS_COLORS = { Available: "#10b981", Busy: "#ef4444", Away: "#f59e0b", Offline: "#d1d5db" };
+const STATUS_LABELS: Record<string, string> = { Available: "🟢 Available", Busy: "🔴 Busy", Away: "🟡 Away", Offline: "⚫ Offline" };
 
 const AVATAR_COLORS = ["#f59e0b", "#3b82f6", "#8b5cf6", "#10b981", "#ec4899", "#f97316"];
 function getAvatarColor(name: string) {
@@ -116,15 +117,29 @@ function InviteMemberModal({ onClose }: { onClose: () => void }) {
 }
 
 export default function TeamPage() {
-  const { currentMembers, currentTeam, currentActivities, removeMember } = useApp();
+  const { currentMembers, currentTeam, currentActivities, currentTasks, updateMember } = useApp();
   const [tab, setTab] = useState<"members" | "activity">("members");
   const [showInvite, setShowInvite] = useState(false);
   const [searchQ, setSearchQ] = useState("");
-  const [showMenu, setShowMenu] = useState<string | null>(null);
+  const [statusMenuId, setStatusMenuId] = useState<string | null>(null);
+
+  // Compute effective status from tasks
+  const getEffectiveStatus = (memberId: string, storedStatus: string) => {
+    const hasActive = currentTasks.some((t) =>
+      t.status === "in-progress" &&
+      ((t.assigneeIds?.includes(memberId)) || t.assigneeId === memberId)
+    );
+    if (hasActive) return "Busy";
+    return storedStatus;
+  };
 
   const filteredMembers = currentMembers.filter((m) =>
     !searchQ || m.name.toLowerCase().includes(searchQ.toLowerCase()) || m.email.toLowerCase().includes(searchQ.toLowerCase())
   );
+
+  // Updated stats using effective status
+  const busyCount = currentMembers.filter((m) => getEffectiveStatus(m.id, m.status) === "Busy").length;
+  const availableCount = currentMembers.filter((m) => getEffectiveStatus(m.id, m.status) === "Available").length;
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -135,8 +150,7 @@ export default function TeamPage() {
             {currentMembers.length} member{currentMembers.length !== 1 ? "s" : ""} · Manage your workspace collaborators
           </p>
         </div>
-        <button onClick={() => setShowInvite(true)}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl"
+        <button onClick={() => setShowInvite(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-xl"
           style={{ background: "#f59e0b", color: "#111827", fontWeight: 600, fontSize: "0.875rem" }}>
           <UserPlus className="w-4 h-4" /> Add Member
         </button>
@@ -146,8 +160,8 @@ export default function TeamPage() {
       <div className="grid grid-cols-3 gap-4 mb-6">
         {[
           { label: "Total Members", value: currentMembers.length, color: "#f59e0b", bg: "#fffbeb" },
-          { label: "Available Now", value: currentMembers.filter((m) => m.status === "Available").length, color: "#10b981", bg: "#ecfdf5" },
-          { label: "Admins & Owners", value: currentMembers.filter((m) => m.role !== "Member").length, color: "#3b82f6", bg: "#eff6ff" },
+          { label: "Available", value: availableCount, color: "#10b981", bg: "#ecfdf5" },
+          { label: "Busy (on tasks)", value: busyCount, color: "#ef4444", bg: "#fef2f2" },
         ].map((s) => (
           <div key={s.label} className="bg-white rounded-2xl border p-4 text-center" style={{ borderColor: "#f0f0ea" }}>
             <div className="text-2xl mb-1" style={{ fontWeight: 700, color: s.color }}>{s.value}</div>
@@ -161,13 +175,7 @@ export default function TeamPage() {
         {[{ id: "members", icon: Users, label: "Members" }, { id: "activity", icon: ActivityIcon, label: "Activity" }].map(({ id, icon: Icon, label }) => (
           <button key={id} onClick={() => setTab(id as "members" | "activity")}
             className="flex items-center gap-2 px-4 py-2 rounded-lg transition-all"
-            style={{
-              background: tab === id ? "white" : "transparent",
-              color: tab === id ? "#111827" : "#6b7280",
-              fontWeight: tab === id ? 600 : 400,
-              fontSize: "0.875rem",
-              boxShadow: tab === id ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
-            }}>
+            style={{ background: tab === id ? "white" : "transparent", color: tab === id ? "#111827" : "#6b7280", fontWeight: tab === id ? 600 : 400, fontSize: "0.875rem", boxShadow: tab === id ? "0 1px 3px rgba(0,0,0,0.1)" : "none" }}>
             <Icon className="w-4 h-4" /> {label}
           </button>
         ))}
@@ -182,10 +190,8 @@ export default function TeamPage() {
           </div>
           <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: "#f0f0ea" }}>
             <div className="hidden sm:grid grid-cols-12 px-5 py-3 border-b" style={{ borderColor: "#f0f0ea" }}>
-              {[{ label: "Member", cols: 5 }, { label: "Role", cols: 2 }, { label: "Status", cols: 2 }, { label: "Email", cols: 3 }].map(({ label, cols }) => (
-                <div key={label} style={{ gridColumn: `span ${cols}`, fontSize: "0.75rem", fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                  {label}
-                </div>
+              {[{ label: "Member", cols: 4 }, { label: "Role", cols: 2 }, { label: "Status", cols: 3 }, { label: "Email", cols: 3 }].map(({ label, cols }) => (
+                <div key={label} style={{ gridColumn: `span ${cols}`, fontSize: "0.75rem", fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
               ))}
             </div>
             {filteredMembers.length === 0 ? (
@@ -195,55 +201,61 @@ export default function TeamPage() {
             ) : filteredMembers.map((member) => {
               const roleConf = ROLE_CONFIG[member.role];
               const RoleIcon = roleConf.icon;
+              const effectiveStatus = getEffectiveStatus(member.id, member.status);
+              const statusColor = STATUS_COLORS[effectiveStatus as keyof typeof STATUS_COLORS] || "#d1d5db";
+              const taskCount = currentTasks.filter((t) =>
+                t.status === "in-progress" && ((t.assigneeIds?.includes(member.id)) || t.assigneeId === member.id)
+              ).length;
+
               return (
                 <div key={member.id} className="flex items-center gap-4 px-5 py-4 transition-colors border-b last:border-b-0"
                   style={{ borderColor: "#f0f0ea" }}
                   onMouseEnter={(e) => e.currentTarget.style.background = "#fafaf7"}
                   onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="flex items-center gap-3 flex-1 min-w-0" style={{ gridColumn: "span 4" }}>
                     <div className="relative flex-shrink-0">
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center text-white"
-                        style={{ background: getAvatarColor(member.name), fontWeight: 700, fontSize: "0.875rem" }}>
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center text-white" style={{ background: getAvatarColor(member.name), fontWeight: 700, fontSize: "0.875rem" }}>
                         {member.avatar}
                       </div>
-                      <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white"
-                        style={{ background: STATUS_COLORS[member.status] }} />
+                      <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white" style={{ background: statusColor }} />
                     </div>
                     <div className="min-w-0">
                       <p style={{ fontWeight: 500, color: "#111827", fontSize: "0.9375rem" }}>{member.name}</p>
-                      <p className="sm:hidden" style={{ fontSize: "0.75rem", color: "#6b7280" }}>{member.email}</p>
+                      {taskCount > 0 && <p style={{ fontSize: "0.6875rem", color: "#ef4444", fontWeight: 500 }}>{taskCount} active task{taskCount > 1 ? "s" : ""}</p>}
                     </div>
                   </div>
+
                   <div className="hidden sm:flex items-center gap-1.5 w-24 flex-shrink-0">
                     <RoleIcon className="w-3.5 h-3.5" style={{ color: roleConf.color }} />
-                    <span className="px-2 py-0.5 rounded-full text-xs" style={{ background: roleConf.bg, color: roleConf.color, fontWeight: 500 }}>
-                      {member.role}
-                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-xs" style={{ background: roleConf.bg, color: roleConf.color, fontWeight: 500 }}>{member.role}</span>
                   </div>
-                  <div className="hidden sm:flex items-center gap-1.5 w-28 flex-shrink-0">
-                    <div className="w-2 h-2 rounded-full" style={{ background: STATUS_COLORS[member.status] }} />
-                    <span style={{ fontSize: "0.8125rem", color: "#6b7280" }}>{member.status}</span>
-                  </div>
-                  <div className="hidden sm:block flex-1 min-w-0">
-                    <p className="truncate" style={{ fontSize: "0.8125rem", color: "#6b7280" }}>{member.email}</p>
-                  </div>
-                  <div className="relative">
-                    <button onClick={() => setShowMenu(showMenu === member.id ? null : member.id)} className="p-2 rounded-lg transition-colors" style={{ color: "#9ca3af" }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = "#f3f4f6"}
-                      onMouseLeave={(e) => { if (showMenu !== member.id) e.currentTarget.style.background = "transparent"; }}>
-                      <MoreHorizontal className="w-4 h-4" />
+
+                  {/* Status — click to change */}
+                  <div className="hidden sm:block w-32 flex-shrink-0 relative">
+                    <button onClick={() => setStatusMenuId(statusMenuId === member.id ? null : member.id)}
+                      className="flex items-center gap-1.5 px-2 py-1 rounded-lg transition-all"
+                      style={{ background: "#f9f9f6" }}>
+                      <div className="w-2 h-2 rounded-full" style={{ background: statusColor }} />
+                      <span style={{ fontSize: "0.8125rem", color: "#374151" }}>{effectiveStatus}</span>
+                      <ChevronDown className="w-3 h-3" style={{ color: "#9ca3af" }} />
                     </button>
-                    {showMenu === member.id && (
-                      <div className="absolute right-0 mt-1 w-40 rounded-xl border bg-white shadow-lg z-10 p-1" style={{ borderColor: "#f0f0ea" }}>
-                        <button onClick={() => { removeMember(member.id); setShowMenu(null); }}
-                          className="w-full text-left px-3 py-2 rounded-lg transition-colors text-sm flex items-center gap-2"
-                          style={{ color: "#ef4444" }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = "#fee2e2"}
-                          onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
-                          <Trash2 className="w-4 h-4" /> Remove Member
-                        </button>
+                    {statusMenuId === member.id && (
+                      <div className="absolute left-0 mt-1 w-40 rounded-xl border bg-white shadow-lg z-20 p-1" style={{ borderColor: "#f0f0ea" }}>
+                        {Object.entries(STATUS_LABELS).map(([val, label]) => (
+                          <button key={val} onClick={() => { updateMember(member.id, { status: val as any }); setStatusMenuId(null); }}
+                            className="w-full text-left px-3 py-2 rounded-lg text-sm transition-colors"
+                            style={{ background: effectiveStatus === val ? "#fffbeb" : "transparent", color: "#374151" }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = "#f9f9f6"}
+                            onMouseLeave={(e) => e.currentTarget.style.background = effectiveStatus === val ? "#fffbeb" : "transparent"}>
+                            {label}
+                          </button>
+                        ))}
                       </div>
                     )}
+                  </div>
+
+                  <div className="hidden sm:block flex-1 min-w-0">
+                    <p className="truncate" style={{ fontSize: "0.8125rem", color: "#6b7280" }}>{member.email}</p>
                   </div>
                 </div>
               );

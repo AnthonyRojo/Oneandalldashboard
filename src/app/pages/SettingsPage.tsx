@@ -31,18 +31,14 @@ export default function SettingsPage() {
   const [pwError, setPwError] = useState("");
 
   // Notifications
-  const [notifications, setNotifications] = useState(() => {
-    const saved = localStorage.getItem("notifications");
-    return saved ? JSON.parse(saved) : {
-      taskAssigned: true,
-      taskCompleted: true,
-      mentions: true,
-      announcements: true,
-      weeklyDigest: false,
-      deadlineReminders: true,
-    };
+  const [notifications, setNotifications] = useState({
+    taskAssigned: true,
+    taskCompleted: true,
+    mentions: true,
+    announcements: true,
+    weeklyDigest: false,
+    deadlineReminders: true,
   });
-  const [notificationSaved, setNotificationSaved] = useState(false);
 
   const handleSaveProfile = async () => {
     setSaveError("");
@@ -160,10 +156,7 @@ export default function SettingsPage() {
 
           {activeSection === "notifications" && (
             <div className="bg-white rounded-2xl border p-6" style={{ borderColor: "#f0f0ea" }}>
-              <div className="flex items-center justify-between mb-5">
-                <h2 style={{ color: "#111827" }}>Notification Preferences</h2>
-                {notificationSaved && <span style={{ color: "#10b981", fontSize: "0.875rem", fontWeight: 500, display: "flex", alignItems: "center", gap: "4px" }}>✓ Saved</span>}
-              </div>
+              <h2 className="mb-5" style={{ color: "#111827" }}>Notification Preferences</h2>
               <div className="space-y-4">
                 {Object.entries(notifications).map(([key, value]) => {
                   const labels: Record<string, { title: string; desc: string }> = {
@@ -180,13 +173,7 @@ export default function SettingsPage() {
                         <p style={{ fontWeight: 500, color: "#111827", fontSize: "0.9375rem" }}>{labels[key].title}</p>
                         <p style={{ fontSize: "0.8125rem", color: "#6b7280" }}>{labels[key].desc}</p>
                       </div>
-                      <button onClick={() => {
-                        const updated = { ...notifications, [key]: !notifications[key as keyof typeof notifications] };
-                        setNotifications(updated);
-                        localStorage.setItem("notifications", JSON.stringify(updated));
-                        setNotificationSaved(true);
-                        setTimeout(() => setNotificationSaved(false), 2500);
-                      }}
+                      <button onClick={() => setNotifications((prev) => ({ ...prev, [key]: !prev[key as keyof typeof prev] }))}
                         className="relative w-11 h-6 rounded-full transition-colors"
                         style={{ background: value ? "#f59e0b" : "#e5e7eb" }}>
                         <div className="absolute top-0.5 rounded-full w-5 h-5 bg-white shadow transition-transform"

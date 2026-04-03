@@ -15,7 +15,7 @@ export type UserRole = "Owner" | "Admin" | "Member";
 export type MemberStatus = "Available" | "Busy" | "Away" | "Offline";
 export type TaskPriority = "Low" | "Medium" | "High";
 export type TaskStatus = "todo" | "in-progress" | "completed";
-export type EventType = "Meeting" | "Deadline" | "Review" | "Other";
+export type EventType = "Meeting" | "Review" | "Post" | "Other";
 export type AnnouncementType = "update" | "poll" | "question";
 export type ActivityType = "task" | "project" | "member" | "announcement" | "event" | "comment" | "submit" | "team";
 
@@ -60,6 +60,7 @@ export interface TaskComment {
   authorName: string;
   content: string;
   createdAt: string;
+  editedAt?: string;
 }
 
 export interface Task {
@@ -68,12 +69,14 @@ export interface Task {
   projectId: string;
   title: string;
   description: string;
-  assigneeId: string;
+  assigneeId?: string; // kept for backward compat
+  assigneeIds: string[];
   priority: TaskPriority;
   status: TaskStatus;
   dueDate: string;
   tags: string[];
   submittedLink?: string;
+  submissionStatus?: "pending" | "approved" | "rejected";
   comments: TaskComment[];
   createdAt?: string;
 }
@@ -96,6 +99,12 @@ export interface AnnouncementComment {
   authorName: string;
   content: string;
   createdAt: string;
+  editedAt?: string;
+}
+
+export interface PollOption {
+  id: string;
+  text: string;
 }
 
 export interface Announcement {
@@ -110,6 +119,9 @@ export interface Announcement {
   attachedProject?: string;
   createdAt: string;
   type: AnnouncementType;
+  editedAt?: string;
+  pollOptions?: PollOption[];
+  pollVotes?: Record<string, string>; // userId → optionId
 }
 
 export interface Activity {
@@ -121,6 +133,27 @@ export interface Activity {
   target: string;
   type: ActivityType;
   createdAt: string;
+}
+
+export interface ChatGroup {
+  id: string;
+  teamId: string;
+  name: string;
+  memberIds: string[];
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  teamId: string;
+  groupId?: string;
+  authorId: string;
+  authorName: string;
+  content: string;
+  createdAt: string;
+  editedAt?: string;
+  deleted?: boolean;
 }
 
 // ─── Context Interface ────────────────────────────────────────────────────────
@@ -146,7 +179,7 @@ interface AppContextType {
   members: TeamMember[];
   currentMembers: TeamMember[];
   addMember: (member: Omit<TeamMember, "id" | "teamId">) => Promise<void>;
-  removeMember: (memberId: string) => Promise<void>;
+  updateMember: (id: string, updates: Partial<TeamMember>) => Promise<void>;
 
   // Projects
   projects: Project[];
@@ -162,24 +195,44 @@ interface AppContextType {
   updateTask: (id: string, updates: Partial<Task>) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   addTaskComment: (taskId: string, content: string) => Promise<void>;
+  updateTaskComment: (taskId: string, commentId: string, content: string) => Promise<void>;
+  deleteTaskComment: (taskId: string, commentId: string) => Promise<void>;
 
   // Calendar Events
   events: CalendarEvent[];
   currentEvents: CalendarEvent[];
   addEvent: (event: Omit<CalendarEvent, "id" | "teamId">) => Promise<void>;
+  updateEvent: (id: string, updates: Partial<CalendarEvent>) => Promise<void>;
   deleteEvent: (id: string) => Promise<void>;
 
   // Announcements
   announcements: Announcement[];
   currentAnnouncements: Announcement[];
-  addAnnouncement: (content: string, type: AnnouncementType, attachedProject?: string) => Promise<void>;
+  addAnnouncement: (content: string, type: AnnouncementType, attachedProject?: string, pollOptions?: PollOption[]) => Promise<void>;
+  updateAnnouncement: (id: string, content: string) => Promise<void>;
+  deleteAnnouncement: (id: string) => Promise<void>;
   toggleLike: (announcementId: string) => Promise<void>;
   togglePin: (announcementId: string) => Promise<void>;
   addAnnouncementComment: (announcementId: string, content: string) => Promise<void>;
+  updateAnnouncementComment: (announcementId: string, commentId: string, content: string) => Promise<void>;
+  deleteAnnouncementComment: (announcementId: string, commentId: string) => Promise<void>;
+  voteOnPoll: (announcementId: string, optionId: string) => Promise<void>;
 
   // Activities
   activities: Activity[];
   currentActivities: Activity[];
+
+  // Messages
+  messages: ChatMessage[];
+  currentMessages: ChatMessage[];
+  sendMessage: (content: string, groupId?: string) => Promise<void>;
+  editMessage: (messageId: string, content: string) => Promise<void>;
+  deleteMessage: (messageId: string) => Promise<void>;
+  loadMessages: () => Promise<void>;
+
+  // Chat Groups
+  chatGroups: ChatGroup[];
+  createChatGroup: (name: string, memberIds: string[]) => Promise<void>;
 
   // Search
   searchQuery: string;
@@ -216,6 +269,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [chatGroups, setChatGroups] = useState<ChatGroup[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -232,13 +287,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const currentEvents = events.filter((e) => e.teamId === currentTeamId);
   const currentAnnouncements = announcements.filter((a) => a.teamId === currentTeamId);
   const currentActivities = activities.filter((a) => a.teamId === currentTeamId);
+  const currentMessages = messages.filter((m) => m.teamId === currentTeamId);
 
   // ── Load team data ─────────────────────────────────────────────────────────
   const loadTeamData = useCallback(async (teamId: string, token: string) => {
     if (!teamId || !token) return;
     setIsDataLoading(true);
     try {
-      const [membersRes, projectsRes, tasksRes, eventsRes, announcementsRes, activitiesRes] =
+      const [membersRes, projectsRes, tasksRes, eventsRes, announcementsRes, activitiesRes, messagesRes, groupsRes] =
         await Promise.all([
           api.getMembers(teamId, token).catch(() => ({ members: [] })),
           api.getProjects(teamId, token).catch(() => ({ projects: [] })),
@@ -246,6 +302,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           api.getEvents(teamId, token).catch(() => ({ events: [] })),
           api.getAnnouncements(teamId, token).catch(() => ({ announcements: [] })),
           api.getActivities(teamId, token).catch(() => ({ activities: [] })),
+          api.getMessages(teamId, token).catch(() => ({ messages: [] })),
+          api.getChatGroups(teamId, token).catch(() => ({ groups: [] })),
         ]);
 
       setMembers((prev) => {
@@ -271,6 +329,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setActivities((prev) => {
         const others = prev.filter((a) => a.teamId !== teamId);
         return [...others, ...(activitiesRes.activities || [])];
+      });
+      setMessages((prev) => {
+        const others = prev.filter((m) => m.teamId !== teamId);
+        return [...others, ...(messagesRes.messages || [])];
+      });
+      setChatGroups((prev) => {
+        const others = prev.filter((g) => g.teamId !== teamId);
+        return [...others, ...(groupsRes.groups || [])];
       });
     } catch (err) {
       console.log(`Load team data error: ${err}`);
@@ -396,6 +462,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setEvents([]);
           setAnnouncements([]);
           setActivities([]);
+          setMessages([]);
         }
       }
     );
@@ -485,6 +552,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setEvents([]);
     setAnnouncements([]);
     setActivities([]);
+    setMessages([]);
   }, []);
 
   // ── Team ops ───────────────────────────────────────────────────────────────
@@ -519,25 +587,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [currentTeamId, broadcastChange]
   );
 
-  const removeMember = useCallback(
-    async (memberId: string) => {
+  const updateMember = useCallback(
+    async (id: string, updates: Partial<TeamMember>) => {
       if (!tokenRef.current || !currentTeamId) return;
-      const memberToRemove = members.find((m) => m.id === memberId);
-      setMembers((prev) => prev.filter((m) => m.id !== memberId));
-      try {
-        await api.updateMember(currentTeamId, memberId, { status: "Offline" }, tokenRef.current);
-      } catch (err) {
-        console.log(`Remove member error: ${err}`);
-      }
-      if (memberToRemove) {
-        setActivities((prev) => {
-          const act: Activity = { id: `local_${Date.now()}`, teamId: currentTeamId, userId: "", userName: "", action: "removed member", target: memberToRemove.name, type: "member", createdAt: new Date().toISOString() };
-          return [act, ...prev];
-        });
-      }
+      setMembers((prev) => prev.map((m) => (m.id === id ? { ...m, ...updates } : m)));
+      const res = await api.updateMember(currentTeamId, id, updates, tokenRef.current);
+      setMembers((prev) => prev.map((m) => (m.id === id ? res.member : m)));
       broadcastChange();
     },
-    [currentTeamId, members, broadcastChange]
+    [currentTeamId, broadcastChange]
   );
 
   // ── Project ops ────────────────────────────────────────────────────────────
@@ -566,11 +624,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     async (id: string) => {
       if (!tokenRef.current || !currentTeamId) return;
       setProjects((prev) => prev.filter((p) => p.id !== id));
-      try {
-        await api.updateProject(currentTeamId, id, { status: "completed" }, tokenRef.current);
-      } catch (err) {
-        console.log(`Delete project error: ${err}`);
-      }
+      await api.deleteProject(currentTeamId, id, tokenRef.current);
       broadcastChange();
     },
     [currentTeamId, broadcastChange]
@@ -592,7 +646,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!tokenRef.current || !currentTeamId) return;
       setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
       const res = await api.updateTask(currentTeamId, id, updates, tokenRef.current);
-      setTasks((prev) => prev.map((t) => (t.id === id ? res.task : t)));
+      setTasks((prev) => {
+        const updated = prev.map((t) => (t.id === id ? res.task : t));
+        // Auto-recalculate project progress when status changes
+        if (updates.status !== undefined && res.task?.projectId) {
+          const projectTasks = updated.filter(
+            (t) => t.teamId === currentTeamId && t.projectId === res.task.projectId
+          );
+          const total = projectTasks.length;
+          const done = projectTasks.filter((t) => t.status === "completed").length;
+          const progress = total > 0 ? Math.round((done / total) * 100) : 0;
+          setTimeout(() => {
+            setProjects((p) =>
+              p.map((proj) => (proj.id === res.task.projectId ? { ...proj, progress } : proj))
+            );
+            if (tokenRef.current && currentTeamId) {
+              api
+                .updateProject(currentTeamId, res.task.projectId, { progress }, tokenRef.current)
+                .catch((e) => console.log(`Auto-progress update error: ${e}`));
+            }
+          }, 0);
+        }
+        return updated;
+      });
       broadcastChange();
     },
     [currentTeamId, broadcastChange]
@@ -618,12 +694,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [currentTeamId, broadcastChange]
   );
 
+  const updateTaskComment = useCallback(
+    async (taskId: string, commentId: string, content: string) => {
+      if (!tokenRef.current || !currentTeamId || !content.trim()) return;
+      const res = await api.updateTaskComment(currentTeamId, taskId, commentId, content, tokenRef.current);
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? res.task : t)));
+      broadcastChange();
+    },
+    [currentTeamId, broadcastChange]
+  );
+
+  const deleteTaskComment = useCallback(
+    async (taskId: string, commentId: string) => {
+      if (!tokenRef.current || !currentTeamId) return;
+      const res = await api.deleteTaskComment(currentTeamId, taskId, commentId, tokenRef.current);
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? res.task : t)));
+      broadcastChange();
+    },
+    [currentTeamId, broadcastChange]
+  );
+
   // ── Event ops ──────────────────────────────────────────────────────────────
   const addEvent = useCallback(
     async (event: Omit<CalendarEvent, "id" | "teamId">) => {
       if (!tokenRef.current || !currentTeamId) return;
       const res = await api.createEvent(currentTeamId, event, tokenRef.current);
       setEvents((prev) => [...prev, res.event]);
+      broadcastChange();
+    },
+    [currentTeamId, broadcastChange]
+  );
+
+  const updateEvent = useCallback(
+    async (id: string, updates: Partial<CalendarEvent>) => {
+      if (!tokenRef.current || !currentTeamId) return;
+      setEvents((prev) => prev.map((e) => (e.id === id ? { ...e, ...updates } : e)));
+      const res = await api.updateEvent(currentTeamId, id, updates, tokenRef.current);
+      setEvents((prev) => prev.map((e) => (e.id === id ? res.event : e)));
       broadcastChange();
     },
     [currentTeamId, broadcastChange]
@@ -641,10 +748,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // ── Announcement ops ───────────────────────────────────────────────────────
   const addAnnouncement = useCallback(
-    async (content: string, type: AnnouncementType, attachedProject?: string) => {
+    async (content: string, type: AnnouncementType, attachedProject?: string, pollOptions?: PollOption[]) => {
       if (!tokenRef.current || !currentTeamId) return;
-      const res = await api.createAnnouncement(currentTeamId, { content, type, attachedProject }, tokenRef.current);
+      const res = await api.createAnnouncement(
+        currentTeamId,
+        { content, type, attachedProject, pollOptions, pollVotes: pollOptions ? {} : undefined },
+        tokenRef.current
+      );
       setAnnouncements((prev) => [res.announcement, ...prev]);
+      broadcastChange();
+    },
+    [currentTeamId, broadcastChange]
+  );
+
+  const updateAnnouncement = useCallback(
+    async (id: string, content: string) => {
+      if (!tokenRef.current || !currentTeamId) return;
+      setAnnouncements((prev) => prev.map((a) => (a.id === id ? { ...a, content } : a)));
+      const res = await api.updateAnnouncement(currentTeamId, id, content, tokenRef.current);
+      setAnnouncements((prev) => prev.map((a) => (a.id === id ? res.announcement : a)));
+      broadcastChange();
+    },
+    [currentTeamId, broadcastChange]
+  );
+
+  const deleteAnnouncement = useCallback(
+    async (id: string) => {
+      if (!tokenRef.current || !currentTeamId) return;
+      setAnnouncements((prev) => prev.filter((a) => a.id !== id));
+      await api.deleteAnnouncement(currentTeamId, id, tokenRef.current);
       broadcastChange();
     },
     [currentTeamId, broadcastChange]
@@ -690,6 +822,102 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [currentTeamId, broadcastChange]
   );
 
+  const updateAnnouncementComment = useCallback(
+    async (announcementId: string, commentId: string, content: string) => {
+      if (!tokenRef.current || !currentTeamId || !content.trim()) return;
+      const res = await api.updateAnnouncementComment(currentTeamId, announcementId, commentId, content, tokenRef.current);
+      setAnnouncements((prev) => prev.map((a) => (a.id === announcementId ? res.announcement : a)));
+      broadcastChange();
+    },
+    [currentTeamId, broadcastChange]
+  );
+
+  const deleteAnnouncementComment = useCallback(
+    async (announcementId: string, commentId: string) => {
+      if (!tokenRef.current || !currentTeamId) return;
+      const res = await api.deleteAnnouncementComment(currentTeamId, announcementId, commentId, tokenRef.current);
+      setAnnouncements((prev) => prev.map((a) => (a.id === announcementId ? res.announcement : a)));
+      broadcastChange();
+    },
+    [currentTeamId, broadcastChange]
+  );
+
+  const voteOnPoll = useCallback(
+    async (announcementId: string, optionId: string) => {
+      if (!tokenRef.current || !currentTeamId || !currentUser) return;
+      // Optimistic update
+      setAnnouncements((prev) =>
+        prev.map((a) => {
+          if (a.id !== announcementId) return a;
+          const votes = { ...(a.pollVotes || {}), [currentUser.id]: optionId };
+          return { ...a, pollVotes: votes };
+        })
+      );
+      const res = await api.voteOnPoll(currentTeamId, announcementId, optionId, tokenRef.current);
+      setAnnouncements((prev) => prev.map((a) => (a.id === announcementId ? res.announcement : a)));
+      broadcastChange();
+    },
+    [currentTeamId, currentUser, broadcastChange]
+  );
+
+  // ── Message ops ────────────────────────────────────────────────────────────
+  const sendMessage = useCallback(
+    async (content: string, groupId?: string) => {
+      if (!tokenRef.current || !currentTeamId || !content.trim()) return;
+      const res = await api.sendMessage(currentTeamId, content, tokenRef.current, groupId);
+      setMessages((prev) => [...prev, res.message]);
+      broadcastChange();
+    },
+    [currentTeamId, broadcastChange]
+  );
+
+  const editMessage = useCallback(
+    async (messageId: string, content: string) => {
+      if (!tokenRef.current || !currentTeamId || !content.trim()) return;
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, content, editedAt: new Date().toISOString() } : m))
+      );
+      await api.editMessage(currentTeamId, messageId, content, tokenRef.current);
+      broadcastChange();
+    },
+    [currentTeamId, broadcastChange]
+  );
+
+  const deleteMessage = useCallback(
+    async (messageId: string) => {
+      if (!tokenRef.current || !currentTeamId) return;
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, deleted: true, content: "This message was deleted." } : m))
+      );
+      await api.deleteMessage(currentTeamId, messageId, tokenRef.current);
+      broadcastChange();
+    },
+    [currentTeamId, broadcastChange]
+  );
+
+  const loadMessages = useCallback(
+    async () => {
+      if (!tokenRef.current || !currentTeamId) return;
+      const res = await api.getMessages(currentTeamId, tokenRef.current);
+      const msgs = res.messages || [];
+      setMessages((prev) => {
+        const others = prev.filter((m) => m.teamId !== currentTeamId);
+        return [...others, ...msgs];
+      });
+    },
+    [currentTeamId]
+  );
+
+  // ── Chat Group ops ─────────────────────────────────────────────────────────
+  const createChatGroup = useCallback(
+    async (name: string, memberIds: string[]) => {
+      if (!tokenRef.current || !currentTeamId || !currentUser) return;
+      const res = await api.createChatGroup(currentTeamId, name, memberIds, tokenRef.current);
+      setChatGroups((prev) => [...prev, res.group]);
+    },
+    [currentTeamId, currentUser]
+  );
+
   return (
     <AppContext.Provider
       value={{
@@ -708,7 +936,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         members,
         currentMembers,
         addMember,
-        removeMember,
+        updateMember,
         projects,
         currentProjects,
         addProject,
@@ -720,18 +948,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updateTask,
         deleteTask,
         addTaskComment,
+        updateTaskComment,
+        deleteTaskComment,
         events,
         currentEvents,
         addEvent,
+        updateEvent,
         deleteEvent,
         announcements,
         currentAnnouncements,
         addAnnouncement,
+        updateAnnouncement,
+        deleteAnnouncement,
         toggleLike,
         togglePin,
         addAnnouncementComment,
+        updateAnnouncementComment,
+        deleteAnnouncementComment,
+        voteOnPoll,
         activities,
         currentActivities,
+        messages,
+        currentMessages,
+        sendMessage,
+        editMessage,
+        deleteMessage,
+        loadMessages,
+        chatGroups,
+        createChatGroup,
         searchQuery,
         setSearchQuery,
         isDataLoading,

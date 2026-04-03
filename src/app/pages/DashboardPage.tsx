@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { useApp } from "../context/AppContext";
-import { FolderOpen, CheckCircle, ListTodo, Users, Plus, Play, Square, Clock, TrendingUp, Video, Zap, Loader2, CalendarDays, AlertCircle, Trash2, MoreHorizontal } from "lucide-react";
+import { useApp, Project } from "../context/AppContext";
+import { FolderOpen, CheckCircle, ListTodo, Users, Plus, Play, Square, Clock, TrendingUp, Video, Zap, Loader2, CalendarDays, AlertCircle, X, Pencil, Trash2, ExternalLink, Save } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell
 } from "recharts";
@@ -36,6 +36,148 @@ const EVENT_TYPE_COLORS: Record<string, { bg: string; color: string; icon: typeo
   Review: { bg: "#fffbeb", color: "#f59e0b", icon: TrendingUp },
   Other: { bg: "#f3f4f6", color: "#6b7280", icon: CalendarDays },
 };
+
+// ── Project Detail Modal ───────────────────────────────────────────────────────
+function ProjectDetailModal({ project: initialProject, onClose }: { project: Project; onClose: () => void }) {
+  const { currentProjects, currentTasks, updateProject, deleteProject } = useApp();
+  const project = currentProjects.find((p) => p.id === initialProject.id) || initialProject;
+  const [editMode, setEditMode] = useState(false);
+  const [editName, setEditName] = useState(project.name);
+  const [editDesc, setEditDesc] = useState(project.description || "");
+  const [editDue, setEditDue] = useState(project.dueDate || "");
+  const [editStatus, setEditStatus] = useState<"active" | "completed">(project.status);
+
+  const projectTasks = currentTasks.filter((t) => t.projectId === project.id);
+  const doneTasks = projectTasks.filter((t) => t.status === "completed").length;
+  const overdue = project.dueDate && project.status !== "completed" && new Date(project.dueDate) < new Date(new Date().toDateString());
+
+  const handleSave = () => {
+    updateProject(project.id, { name: editName, description: editDesc, dueDate: editDue, status: editStatus });
+    setEditMode(false);
+  };
+
+  const handleDelete = () => {
+    if (confirm(`Delete project "${project.name}"? This won't delete associated tasks.`)) {
+      deleteProject(project.id);
+      onClose();
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto z-10">
+        {/* Color-coded top bar */}
+        <div className="h-2 rounded-t-2xl" style={{ background: project.color }} />
+        <div className="p-6 border-b" style={{ borderColor: "#f0f0ea" }}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white text-lg font-bold flex-shrink-0"
+                style={{ background: project.color }}>
+                {project.name[0]}
+              </div>
+              {editMode ? (
+                <input value={editName} onChange={(e) => setEditName(e.target.value)} className="flex-1 px-3 py-2 rounded-xl border outline-none font-semibold text-lg"
+                  style={{ borderColor: project.color, color: "#111827" }} />
+              ) : (
+                <div>
+                  <h2 style={{ color: "#111827", fontSize: "1.25rem" }}>{project.name}</h2>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="px-2.5 py-0.5 rounded-full text-xs capitalize"
+                      style={{ background: project.status === "completed" ? "#ecfdf5" : "#fffbeb", color: project.status === "completed" ? "#10b981" : "#f59e0b", fontWeight: 600 }}>
+                      {project.status}
+                    </span>
+                    {overdue && <span className="px-2.5 py-0.5 rounded-full text-xs" style={{ background: "#fef2f2", color: "#ef4444", fontWeight: 600 }}>⚠ Overdue</span>}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <button onClick={() => setEditMode(!editMode)} className="p-2 rounded-xl" style={{ color: editMode ? "#f59e0b" : "#9ca3af" }}><Pencil className="w-4 h-4" /></button>
+              <button onClick={handleDelete} className="p-2 rounded-xl" style={{ color: "#ef4444" }}><Trash2 className="w-4 h-4" /></button>
+              <button onClick={onClose} className="p-2 rounded-xl" style={{ color: "#9ca3af" }}><X className="w-5 h-5" /></button>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-5">
+          {/* Progress */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "#374151" }}>Progress</p>
+              <span style={{ fontSize: "0.875rem", fontWeight: 700, color: project.color }}>{project.progress}%</span>
+            </div>
+            <div className="h-3 rounded-full" style={{ background: "#f0f0ea" }}>
+              <div className="h-full rounded-full transition-all" style={{ width: `${project.progress}%`, background: project.color }} />
+            </div>
+            <p style={{ fontSize: "0.75rem", color: "#9ca3af", marginTop: 6 }}>{doneTasks}/{projectTasks.length} tasks completed</p>
+          </div>
+
+          {/* Description */}
+          <div>
+            <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "#374151", marginBottom: 6 }}>Description</p>
+            {editMode ? (
+              <textarea value={editDesc} onChange={(e) => setEditDesc(e.target.value)} rows={3}
+                className="w-full px-3 py-2 rounded-xl border outline-none resize-none"
+                style={{ borderColor: "#e5e7eb", fontSize: "0.875rem" }} />
+            ) : project.description ? (
+              <p style={{ fontSize: "0.875rem", color: "#6b7280", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{project.description}</p>
+            ) : (
+              <p style={{ fontSize: "0.875rem", color: "#9ca3af", fontStyle: "italic" }}>No description</p>
+            )}
+          </div>
+
+          {/* Deadline */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "#374151", marginBottom: 6 }}>Deadline</p>
+              {editMode ? (
+                <input type="date" value={editDue} onChange={(e) => setEditDue(e.target.value)} className="w-full px-3 py-1.5 rounded-xl border outline-none" style={{ fontSize: "0.875rem", borderColor: "#e5e7eb" }} />
+              ) : (
+                <p style={{ fontSize: "0.875rem", color: overdue ? "#ef4444" : "#374151", fontWeight: overdue ? 600 : 400 }}>
+                  {project.dueDate || "—"}{overdue && " (Overdue)"}
+                </p>
+              )}
+            </div>
+            {editMode && (
+              <div>
+                <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "#374151", marginBottom: 6 }}>Status</p>
+                <select value={editStatus} onChange={(e) => setEditStatus(e.target.value as any)} className="w-full px-3 py-1.5 rounded-xl border outline-none" style={{ fontSize: "0.875rem", borderColor: "#e5e7eb" }}>
+                  <option value="active">Active</option>
+                  <option value="completed">Completed</option>
+                </select>
+              </div>
+            )}
+          </div>
+
+          {editMode && (
+            <button onClick={handleSave} className="w-full py-2.5 rounded-xl flex items-center justify-center gap-2"
+              style={{ background: "#f59e0b", color: "#111827", fontWeight: 600, fontSize: "0.875rem" }}>
+              <Save className="w-4 h-4" /> Save Changes
+            </button>
+          )}
+
+          {/* Tasks */}
+          {projectTasks.length > 0 && (
+            <div>
+              <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "#374151", marginBottom: 8 }}>Tasks ({projectTasks.length})</p>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {projectTasks.map((t) => (
+                  <div key={t.id} className="flex items-center gap-3 p-3 rounded-xl" style={{ background: "#fafaf7" }}>
+                    <div className="w-2 h-2 rounded-full flex-shrink-0"
+                      style={{ background: t.status === "completed" ? "#10b981" : t.status === "in-progress" ? "#f59e0b" : "#e5e7eb" }} />
+                    <p className="flex-1 truncate" style={{ fontSize: "0.8125rem", color: "#374151" }}>{t.title}</p>
+                    <span style={{ fontSize: "0.75rem", color: "#9ca3af" }}>{t.status}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function TimeTracker() {
   const [running, setRunning] = useState(false);
@@ -102,12 +244,12 @@ function TimeTracker() {
 }
 
 export default function DashboardPage() {
-  const { currentTeam, currentProjects, currentTasks, currentMembers, currentEvents, currentActivities, isDataLoading, createTeam, teams, deleteProject } = useApp();
+  const { currentTeam, currentProjects, currentTasks, currentMembers, currentEvents, currentActivities, isDataLoading, createTeam, teams } = useApp();
   const [showAddProject, setShowAddProject] = useState(false);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [newTeamName, setNewTeamName] = useState("");
   const [creatingTeam, setCreatingTeam] = useState(false);
   const [createTeamError, setCreateTeamError] = useState("");
-  const [projectMenu, setProjectMenu] = useState<string | null>(null);
 
   const handleCreateFirstTeam = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -189,11 +331,13 @@ export default function DashboardPage() {
     return { day: label, tasks: total, completed };
   });
 
-  // Build project progress chart
-  const projectProgressData = currentProjects.map((p) => ({
-    name: p.name.length > 14 ? p.name.slice(0, 14) + "…" : p.name,
+  // Build project progress chart — use id to guarantee unique keys
+  const projectProgressData = currentProjects.map((p, i) => ({
+    name: p.name.length > 14 ? p.name.slice(0, 13) + "…" : p.name,
+    // suffix index so recharts never sees two identical category keys
+    uniqueKey: `${p.id}-${i}`,
     progress: p.progress,
-    fill: p.color,
+    fill: p.color || "#f59e0b",
   }));
 
   // Upcoming events (next 3, sorted by date)
@@ -212,6 +356,18 @@ export default function DashboardPage() {
     { label: "Active Tasks", value: activeTasks.length, icon: ListTodo, color: "#3b82f6", bg: "#eff6ff", empty: "No open tasks" },
     { label: "Team Members", value: currentMembers.length, icon: Users, color: "#8b5cf6", bg: "#f5f3ff", empty: "No members" },
   ];
+
+  const STATUS_COLORS: Record<string, string> = {
+    Available: "#10b981", Busy: "#ef4444", Away: "#f59e0b", Offline: "#d1d5db"
+  };
+
+  // Compute effective status for each member from tasks
+  const getMemberStatus = (memberId: string, stored: string) => {
+    const busy = currentTasks.some(
+      (t) => t.status === "in-progress" && ((t.assigneeIds?.includes(memberId)) || t.assigneeId === memberId)
+    );
+    return busy ? "Busy" : stored;
+  };
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -249,6 +405,37 @@ export default function DashboardPage() {
         ))}
       </div>
 
+      {/* Team Status Bar */}
+      {currentMembers.length > 0 && (
+        <div className="bg-white rounded-2xl border p-4 mb-6 flex items-center gap-3 flex-wrap" style={{ borderColor: "#f0f0ea" }}>
+          <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "#374151", marginRight: 4 }}>Team:</span>
+          {currentMembers.map((m) => {
+            const status = getMemberStatus(m.id, m.status);
+            const statusColor = STATUS_COLORS[status] || "#d1d5db";
+            return (
+              <div key={m.id} className="flex items-center gap-1.5" title={`${m.name} — ${status}`}>
+                <div className="relative">
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                    style={{ background: getAvatarColor(m.name) }}>
+                    {m.avatar}
+                  </div>
+                  <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white"
+                    style={{ background: statusColor }} />
+                </div>
+                <div>
+                  <p style={{ fontSize: "0.75rem", fontWeight: 500, color: "#374151", lineHeight: 1.2 }}>{m.name.split(" ")[0]}</p>
+                  <p style={{ fontSize: "0.625rem", color: statusColor, fontWeight: 600 }}>{status}</p>
+                </div>
+              </div>
+            );
+          })}
+          <div className="ml-auto flex items-center gap-3">
+            <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full" style={{ background: "#10b981" }} /><span style={{ fontSize: "0.75rem", color: "#6b7280" }}>Available</span></div>
+            <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full" style={{ background: "#ef4444" }} /><span style={{ fontSize: "0.75rem", color: "#6b7280" }}>Busy</span></div>
+          </div>
+        </div>
+      )}
+
       {/* Middle Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
         {/* Activity Chart — real data from activities */}
@@ -281,8 +468,8 @@ export default function DashboardPage() {
                 <XAxis dataKey="day" tick={{ fill: "#9ca3af", fontSize: 12 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: "#9ca3af", fontSize: 12 }} axisLine={false} tickLine={false} allowDecimals={false} />
                 <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #f0f0ea" }} />
-                <Area type="monotone" dataKey="tasks" stroke="#f59e0b" strokeWidth={2} fill="url(#tasksGrad)" name="Total Actions" dot={{ fill: "#f59e0b", r: 3 }} />
-                <Area type="monotone" dataKey="completed" stroke="#10b981" strokeWidth={2} fill="url(#completedGrad)" name="Completed" dot={{ fill: "#10b981", r: 3 }} />
+                <Area key="area-tasks" type="monotone" dataKey="tasks" stroke="#f59e0b" strokeWidth={2} fill="url(#tasksGrad)" name="Total Actions" dot={false} activeDot={{ fill: "#f59e0b", r: 4, strokeWidth: 0 }} />
+                <Area key="area-completed" type="monotone" dataKey="completed" stroke="#10b981" strokeWidth={2} fill="url(#completedGrad)" name="Completed" dot={false} activeDot={{ fill: "#10b981", r: 4, strokeWidth: 0 }} />
               </AreaChart>
             </ResponsiveContainer>
           )}
@@ -302,14 +489,23 @@ export default function DashboardPage() {
               {upcomingEvents.map((event) => {
                 const conf = EVENT_TYPE_COLORS[event.type] || EVENT_TYPE_COLORS.Other;
                 const Icon = conf.icon;
+                const hasLink = !!event.link;
                 return (
-                  <div key={event.id} className="flex items-start gap-3 p-3 rounded-xl" style={{ background: "#fafaf7" }}>
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: conf.bg }}>
+                  <div key={event.id}
+                    className="flex items-start gap-3 p-3 rounded-xl transition-all"
+                    style={{ background: conf.bg, cursor: hasLink ? "pointer" : "default", border: `1px solid ${conf.bg}` }}
+                    onClick={() => hasLink && window.open(event.link, "_blank", "noopener,noreferrer")}
+                    onMouseEnter={(e) => { if (hasLink) e.currentTarget.style.opacity = "0.85"; }}
+                    onMouseLeave={(e) => { if (hasLink) e.currentTarget.style.opacity = "1"; }}>
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "white" }}>
                       <Icon className="w-4 h-4" style={{ color: conf.color }} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "#111827" }} className="truncate">{event.title}</p>
-                      <p style={{ fontSize: "0.75rem", color: "#6b7280", marginTop: 2 }}>
+                      <div className="flex items-center gap-1.5">
+                        <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "#111827" }} className="truncate">{event.title}</p>
+                        {hasLink && <ExternalLink className="w-3 h-3 flex-shrink-0" style={{ color: conf.color }} />}
+                      </div>
+                      <p style={{ fontSize: "0.75rem", color: conf.color, marginTop: 2 }}>
                         {formatEventDate(event.date)} · {formatEventTime(event.startTime)}
                       </p>
                     </div>
@@ -348,15 +544,23 @@ export default function DashboardPage() {
               {activeProjects.slice(0, 5).map((project) => {
                 const projectTasks = currentTasks.filter((t) => t.projectId === project.id);
                 const done = projectTasks.filter((t) => t.status === "completed").length;
+                const overdue = project.dueDate && project.status !== "completed" && new Date(project.dueDate) < new Date(new Date().toDateString());
                 return (
-                  <div key={project.id} className="flex items-center gap-4 px-5 py-4">
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-white text-sm font-bold"
-                      style={{ background: project.color }}>
+                  <div key={project.id}
+                    className="flex items-center gap-4 px-5 py-4 cursor-pointer transition-all"
+                    style={{ background: "white" }}
+                    onClick={() => setSelectedProject(project)}
+                    onMouseEnter={(e) => e.currentTarget.style.background = "#fafaf7"}
+                    onMouseLeave={(e) => e.currentTarget.style.background = "white"}>
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-white text-sm font-bold" style={{ background: project.color }}>
                       {project.name[0]}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1.5">
-                        <p style={{ fontWeight: 500, color: "#111827", fontSize: "0.9375rem" }} className="truncate">{project.name}</p>
+                        <div className="flex items-center gap-2">
+                          <p style={{ fontWeight: 500, color: "#111827", fontSize: "0.9375rem" }} className="truncate">{project.name}</p>
+                          {overdue && <span className="px-2 py-0.5 rounded-full text-xs flex-shrink-0" style={{ background: "#fef2f2", color: "#ef4444", fontWeight: 600 }}>Overdue</span>}
+                        </div>
                         <span style={{ fontSize: "0.75rem", color: "#6b7280", marginLeft: 8, flexShrink: 0 }}>{project.progress}%</span>
                       </div>
                       <div className="h-1.5 rounded-full" style={{ background: "#f0f0ea" }}>
@@ -365,24 +569,6 @@ export default function DashboardPage() {
                       <p style={{ fontSize: "0.75rem", color: "#9ca3af", marginTop: 4 }}>
                         {done}/{projectTasks.length} tasks · {project.dueDate ? `Due ${project.dueDate}` : "No deadline"}
                       </p>
-                    </div>
-                    <div className="relative flex-shrink-0">
-                      <button onClick={() => setProjectMenu(projectMenu === project.id ? null : project.id)} className="p-2 rounded-lg transition-colors" style={{ color: "#9ca3af" }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = "#f3f4f6"}
-                        onMouseLeave={(e) => { if (projectMenu !== project.id) e.currentTarget.style.background = "transparent"; }}>
-                        <MoreHorizontal className="w-4 h-4" />
-                      </button>
-                      {projectMenu === project.id && (
-                        <div className="absolute right-0 mt-1 w-40 rounded-xl border bg-white shadow-lg z-10 p-1" style={{ borderColor: "#f0f0ea" }}>
-                          <button onClick={() => { deleteProject(project.id); setProjectMenu(null); }}
-                            className="w-full text-left px-3 py-2 rounded-lg transition-colors text-sm flex items-center gap-2"
-                            style={{ color: "#ef4444" }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = "#fee2e2"}
-                            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
-                            <Trash2 className="w-4 h-4" /> Archive Project
-                          </button>
-                        </div>
-                      )}
                     </div>
                   </div>
                 );
@@ -406,9 +592,9 @@ export default function DashboardPage() {
               <XAxis type="number" domain={[0, 100]} tick={{ fill: "#9ca3af", fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
               <YAxis type="category" dataKey="name" tick={{ fill: "#374151", fontSize: 12 }} axisLine={false} tickLine={false} width={90} />
               <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #f0f0ea" }} formatter={(v) => [`${v}%`, "Progress"]} />
-              <Bar dataKey="progress" radius={[0, 6, 6, 0]}>
+              <Bar key="bar-progress" dataKey="progress" radius={[0, 6, 6, 0]}>
                 {projectProgressData.map((entry, index) => (
-                  <Cell key={index} fill={entry.fill} />
+                  <Cell key={`bar-cell-${entry.uniqueKey}`} fill={entry.fill} />
                 ))}
               </Bar>
             </BarChart>
@@ -416,7 +602,9 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Modals */}
       {showAddProject && <AddProjectModal onClose={() => setShowAddProject(false)} />}
+      {selectedProject && <ProjectDetailModal project={selectedProject} onClose={() => setSelectedProject(null)} />}
     </div>
   );
 }
