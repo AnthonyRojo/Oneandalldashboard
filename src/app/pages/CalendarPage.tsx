@@ -4,7 +4,7 @@ import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   eachDayOfInterval, isSameMonth, isSameDay, isToday, addMonths, subMonths
 } from "date-fns";
-import { ChevronLeft, ChevronRight, Plus, X, Clock, Link, Video, AlertCircle, Eye, BookOpen } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, X, Clock, Link, Video, AlertCircle, Eye, BookOpen, Trash2 } from "lucide-react";
 
 const EVENT_COLORS: Record<EventType, { color: string; bg: string; dot: string }> = {
   Meeting: { color: "#3b82f6", bg: "#eff6ff", dot: "#3b82f6" },
@@ -98,7 +98,7 @@ function CreateEventModal({ onClose, defaultDate }: { onClose: () => void; defau
 }
 
 export default function CalendarPage() {
-  const { currentEvents } = useApp();
+  const { currentEvents, deleteEvent } = useApp();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showCreate, setShowCreate] = useState(false);
@@ -267,6 +267,12 @@ export default function CalendarPage() {
                           </a>
                         )}
                       </div>
+                      <button onClick={() => deleteEvent(event.id)} className="p-1.5 rounded-lg transition-colors flex-shrink-0"
+                        style={{ color: "#ef4444" }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = "#fee2e2"}
+                        onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
                 );
