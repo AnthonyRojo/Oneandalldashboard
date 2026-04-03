@@ -306,9 +306,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           api.getChatGroups(teamId, token).catch(() => ({ groups: [] })),
         ]);
 
+      console.log("[v0] Loaded team data:", { teamId, members: membersRes.members?.length, projects: projectsRes.projects?.length, tasks: tasksRes.tasks?.length });
+
       setMembers((prev) => {
         const others = prev.filter((m) => m.teamId !== teamId);
-        return [...others, ...(membersRes.members || [])];
+        const updated = [...others, ...(membersRes.members || [])];
+        console.log("[v0] Members updated:", updated.length);
+        return updated;
       });
       setProjects((prev) => {
         const others = prev.filter((p) => p.teamId !== teamId);
@@ -339,7 +343,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return [...others, ...(groupsRes.groups || [])];
       });
     } catch (err) {
-      console.log(`Load team data error: ${err}`);
+      console.log(`[v0] Load team data error: ${err}`);
     } finally {
       setIsDataLoading(false);
     }
@@ -447,6 +451,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       async (event, session) => {
         if (!mounted) return;
         if (event === "SIGNED_IN" && session?.user) {
+          console.log("[v0] SIGNED_IN event triggered for user:", session.user.email);
           // Handle new sign in — clear old data and load user data
           // Clear all old user data first
           setMembers([]);
@@ -471,8 +476,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           tokenRef.current = session.access_token;
 
           const userTeams = await loadUserTeams(session.access_token);
+          console.log("[v0] User teams loaded:", userTeams.length);
           if (userTeams.length > 0 && mounted) {
             const firstTeamId = userTeams[0].id;
+            console.log("[v0] Loading team data for team:", firstTeamId);
             setCurrentTeamIdState(firstTeamId);
             currentTeamRef.current = firstTeamId;
             subscribeToTeam(firstTeamId);
