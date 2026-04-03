@@ -362,16 +362,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [currentTeamId, loadTeamData]);
 
-  // ── Realtime broadcast ─────────────────────────────────────────────────────
-  const broadcastChange = useCallback(() => {
-    if (!realtimeChannelRef.current) return;
-    realtimeChannelRef.current.send({
-      type: "broadcast",
-      event: "data_changed",
-      payload: { teamId: currentTeamRef.current },
-    }).catch((err: any) => console.log(`Broadcast error: ${err}`));
-  }, []);
-
+  // ── Realtime subscriptions ─────────────────────────────────────────────────
   const subscribeToTeam = useCallback((teamId: string) => {
     if (realtimeChannelRef.current) {
       supabase.removeChannel(realtimeChannelRef.current);
@@ -379,22 +370,74 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     if (!teamId) return;
 
-    const channel = supabase.channel(`team-changes:${teamId}`, {
-      config: { broadcast: { self: false } },
-    });
+    // Subscribe to database changes for all team-related tables
+    const channel = supabase.channel(`team-realtime:${teamId}`);
+
+    // Debounced refresh to avoid too many API calls
+    const scheduleRefresh = () => {
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+      refreshTimerRef.current = setTimeout(() => {
+        if (tokenRef.current && currentTeamRef.current && currentUserIdRef.current) {
+          console.log("[v0] Realtime: refreshing team data");
+          loadTeamData(currentTeamRef.current, tokenRef.current, currentUserIdRef.current);
+        }
+      }, 500);
+    };
 
     channel
-      .on("broadcast", { event: "data_changed" }, () => {
-        if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-        refreshTimerRef.current = setTimeout(() => {
-          if (tokenRef.current && currentTeamRef.current && currentUserIdRef.current) {
-            loadTeamData(currentTeamRef.current, tokenRef.current, currentUserIdRef.current);
-          }
-        }, 300);
-      })
+      // Projects changes
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "projects", filter: `team_id=eq.${teamId}` },
+        () => scheduleRefresh()
+      )
+      // Tasks changes
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "tasks", filter: `team_id=eq.${teamId}` },
+        () => scheduleRefresh()
+      )
+      // Events changes
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "events", filter: `team_id=eq.${teamId}` },
+        () => scheduleRefresh()
+      )
+      // Announcements changes
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "announcements", filter: `team_id=eq.${teamId}` },
+        () => scheduleRefresh()
+      )
+      // Messages changes
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "messages", filter: `team_id=eq.${teamId}` },
+        () => scheduleRefresh()
+      )
+      // Activities changes
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "activities", filter: `team_id=eq.${teamId}` },
+        () => scheduleRefresh()
+      )
+      // Team members changes
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "team_members", filter: `team_id=eq.${teamId}` },
+        () => scheduleRefresh()
+      )
+      // Chat groups changes
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "chat_groups", filter: `team_id=eq.${teamId}` },
+        () => scheduleRefresh()
+      )
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
-          console.log(`Realtime: subscribed to team-changes:${teamId}`);
+          console.log(`[v0] Realtime: subscribed to team ${teamId} database changes`);
+        } else if (status === "CHANNEL_ERROR") {
+          console.log(`[v0] Realtime: channel error for team ${teamId}`);
         }
       });
 
@@ -652,9 +695,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const act: Activity = { id: `local_${Date.now()}`, teamId: currentTeamId, userId: "", userName: "", action: "added member", target: member.name, type: "member", createdAt: new Date().toISOString() };
         return [act, ...prev];
       });
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, broadcastChange]
+    [currentTeamId]
   );
 
   const updateMember = useCallback(
@@ -663,9 +706,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setMembers((prev) => prev.map((m) => (m.id === id ? { ...m, ...updates } : m)));
       const res = await api.updateMember(currentTeamId, id, updates, tokenRef.current);
       setMembers((prev) => prev.map((m) => (m.id === id ? res.member : m)));
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, broadcastChange]
+    [currentTeamId]
   );
 
   // ── Project ops ────────────────────────────────────────────────────────────
@@ -674,9 +717,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!tokenRef.current || !currentTeamId) return;
       const res = await api.createProject(currentTeamId, project, tokenRef.current);
       setProjects((prev) => [...prev, res.project]);
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, broadcastChange]
+    [currentTeamId]
   );
 
   const updateProject = useCallback(
@@ -685,9 +728,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
       const res = await api.updateProject(currentTeamId, id, updates, tokenRef.current);
       setProjects((prev) => prev.map((p) => (p.id === id ? res.project : p)));
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, broadcastChange]
+    [currentTeamId]
   );
 
   const deleteProject = useCallback(
@@ -695,9 +738,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!tokenRef.current || !currentTeamId) return;
       setProjects((prev) => prev.filter((p) => p.id !== id));
       await api.deleteProject(currentTeamId, id, tokenRef.current);
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, broadcastChange]
+    [currentTeamId]
   );
 
   // ── Task ops ───────────────────────────────────────────────────────────────
@@ -706,9 +749,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!tokenRef.current || !currentTeamId) return;
       const res = await api.createTask(currentTeamId, task, tokenRef.current);
       setTasks((prev) => [...prev, res.task]);
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, broadcastChange]
+    [currentTeamId]
   );
 
   const updateTask = useCallback(
@@ -739,9 +782,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
         return updated;
       });
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, broadcastChange]
+    [currentTeamId]
   );
 
   const deleteTask = useCallback(
@@ -749,9 +792,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!tokenRef.current || !currentTeamId) return;
       setTasks((prev) => prev.filter((t) => t.id !== id));
       await api.deleteTask(currentTeamId, id, tokenRef.current);
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, broadcastChange]
+    [currentTeamId]
   );
 
   const addTaskComment = useCallback(
@@ -759,9 +802,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!tokenRef.current || !currentTeamId || !content.trim()) return;
       const res = await api.addTaskComment(currentTeamId, taskId, content, tokenRef.current);
       setTasks((prev) => prev.map((t) => (t.id === taskId ? res.task : t)));
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, broadcastChange]
+    [currentTeamId]
   );
 
   const updateTaskComment = useCallback(
@@ -769,9 +812,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!tokenRef.current || !currentTeamId || !content.trim()) return;
       const res = await api.updateTaskComment(currentTeamId, taskId, commentId, content, tokenRef.current);
       setTasks((prev) => prev.map((t) => (t.id === taskId ? res.task : t)));
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, broadcastChange]
+    [currentTeamId]
   );
 
   const deleteTaskComment = useCallback(
@@ -779,9 +822,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!tokenRef.current || !currentTeamId) return;
       const res = await api.deleteTaskComment(currentTeamId, taskId, commentId, tokenRef.current);
       setTasks((prev) => prev.map((t) => (t.id === taskId ? res.task : t)));
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, broadcastChange]
+    [currentTeamId]
   );
 
   // ── Event ops ──────────────────────────────────────────────────────────────
@@ -790,9 +833,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!tokenRef.current || !currentTeamId) return;
       const res = await api.createEvent(currentTeamId, event, tokenRef.current);
       setEvents((prev) => [...prev, res.event]);
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, broadcastChange]
+    [currentTeamId]
   );
 
   const updateEvent = useCallback(
@@ -801,9 +844,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setEvents((prev) => prev.map((e) => (e.id === id ? { ...e, ...updates } : e)));
       const res = await api.updateEvent(currentTeamId, id, updates, tokenRef.current);
       setEvents((prev) => prev.map((e) => (e.id === id ? res.event : e)));
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, broadcastChange]
+    [currentTeamId]
   );
 
   const deleteEvent = useCallback(
@@ -811,9 +854,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!tokenRef.current || !currentTeamId) return;
       setEvents((prev) => prev.filter((e) => e.id !== id));
       await api.deleteEvent(currentTeamId, id, tokenRef.current);
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, broadcastChange]
+    [currentTeamId]
   );
 
   // ── Announcement ops ───────────────────────────────────────────────────────
@@ -826,9 +869,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         tokenRef.current
       );
       setAnnouncements((prev) => [res.announcement, ...prev]);
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, broadcastChange]
+    [currentTeamId]
   );
 
   const updateAnnouncement = useCallback(
@@ -837,9 +880,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setAnnouncements((prev) => prev.map((a) => (a.id === id ? { ...a, content } : a)));
       const res = await api.updateAnnouncement(currentTeamId, id, content, tokenRef.current);
       setAnnouncements((prev) => prev.map((a) => (a.id === id ? res.announcement : a)));
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, broadcastChange]
+    [currentTeamId]
   );
 
   const deleteAnnouncement = useCallback(
@@ -847,9 +890,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!tokenRef.current || !currentTeamId) return;
       setAnnouncements((prev) => prev.filter((a) => a.id !== id));
       await api.deleteAnnouncement(currentTeamId, id, tokenRef.current);
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, broadcastChange]
+    [currentTeamId]
   );
 
   const toggleLike = useCallback(
@@ -864,9 +907,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       );
       const res = await api.toggleLike(currentTeamId, announcementId, tokenRef.current);
       setAnnouncements((prev) => prev.map((a) => (a.id === announcementId ? res.announcement : a)));
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, currentUser, broadcastChange]
+    [currentTeamId, currentUser]
   );
 
   const togglePin = useCallback(
@@ -877,9 +920,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       );
       const res = await api.togglePin(currentTeamId, announcementId, tokenRef.current);
       setAnnouncements((prev) => prev.map((a) => (a.id === announcementId ? res.announcement : a)));
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, broadcastChange]
+    [currentTeamId]
   );
 
   const addAnnouncementComment = useCallback(
@@ -887,9 +930,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!tokenRef.current || !currentTeamId || !content.trim()) return;
       const res = await api.addAnnouncementComment(currentTeamId, announcementId, content, tokenRef.current);
       setAnnouncements((prev) => prev.map((a) => (a.id === announcementId ? res.announcement : a)));
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, broadcastChange]
+    [currentTeamId]
   );
 
   const updateAnnouncementComment = useCallback(
@@ -897,9 +940,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!tokenRef.current || !currentTeamId || !content.trim()) return;
       const res = await api.updateAnnouncementComment(currentTeamId, announcementId, commentId, content, tokenRef.current);
       setAnnouncements((prev) => prev.map((a) => (a.id === announcementId ? res.announcement : a)));
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, broadcastChange]
+    [currentTeamId]
   );
 
   const deleteAnnouncementComment = useCallback(
@@ -907,9 +950,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!tokenRef.current || !currentTeamId) return;
       const res = await api.deleteAnnouncementComment(currentTeamId, announcementId, commentId, tokenRef.current);
       setAnnouncements((prev) => prev.map((a) => (a.id === announcementId ? res.announcement : a)));
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, broadcastChange]
+    [currentTeamId]
   );
 
   const voteOnPoll = useCallback(
@@ -925,9 +968,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       );
       const res = await api.voteOnPoll(currentTeamId, announcementId, optionId, tokenRef.current);
       setAnnouncements((prev) => prev.map((a) => (a.id === announcementId ? res.announcement : a)));
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, currentUser, broadcastChange]
+    [currentTeamId, currentUser]
   );
 
   // ── Message ops ────────────────────────────────────────────────────────────
@@ -936,9 +979,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!tokenRef.current || !currentTeamId || !content.trim()) return;
       const res = await api.sendMessage(currentTeamId, content, tokenRef.current, groupId);
       setMessages((prev) => [...prev, res.message]);
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, broadcastChange]
+    [currentTeamId]
   );
 
   const editMessage = useCallback(
@@ -948,9 +991,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         prev.map((m) => (m.id === messageId ? { ...m, content, editedAt: new Date().toISOString() } : m))
       );
       await api.editMessage(currentTeamId, messageId, content, tokenRef.current);
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, broadcastChange]
+    [currentTeamId]
   );
 
   const deleteMessage = useCallback(
@@ -960,9 +1003,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         prev.map((m) => (m.id === messageId ? { ...m, deleted: true, content: "This message was deleted." } : m))
       );
       await api.deleteMessage(currentTeamId, messageId, tokenRef.current);
-      broadcastChange();
+      // Realtime will auto-detect this change
     },
-    [currentTeamId, broadcastChange]
+    [currentTeamId]
   );
 
   const loadMessages = useCallback(
