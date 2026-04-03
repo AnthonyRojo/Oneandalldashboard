@@ -48,6 +48,8 @@ export const api = {
     apiFetch(`/teams/${teamId}/members`, { method: "POST", body: JSON.stringify(data) }, token),
   updateMember: (teamId: string, memberId: string, data: object, token: string) =>
     apiFetch(`/teams/${teamId}/members/${memberId}`, { method: "PUT", body: JSON.stringify(data) }, token),
+  deleteMember: (teamId: string, memberId: string, token: string) =>
+    apiFetch(`/teams/${teamId}/members/${memberId}`, { method: "DELETE" }, token),
 
   // Projects
   getProjects: (teamId: string, token: string) =>
