@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useApp, UserRole, Activity } from "../context/AppContext";
-import { UserPlus, Users, Activity as ActivityIcon, Crown, Shield, User, X, Mail, MoreHorizontal, CheckCircle, FolderOpen, MessageSquare, CalendarDays, Megaphone, LogIn } from "lucide-react";
+import { UserPlus, Users, Activity as ActivityIcon, Crown, Shield, User, X, Mail, MoreHorizontal, CheckCircle, FolderOpen, MessageSquare, CalendarDays, Megaphone, LogIn, Trash2 } from "lucide-react";
 
 const ROLE_CONFIG: Record<UserRole, { color: string; bg: string; icon: typeof Crown }> = {
   Owner: { color: "#f59e0b", bg: "#fffbeb", icon: Crown },
@@ -116,10 +116,11 @@ function InviteMemberModal({ onClose }: { onClose: () => void }) {
 }
 
 export default function TeamPage() {
-  const { currentMembers, currentTeam, currentActivities } = useApp();
+  const { currentMembers, currentTeam, currentActivities, removeMember } = useApp();
   const [tab, setTab] = useState<"members" | "activity">("members");
   const [showInvite, setShowInvite] = useState(false);
   const [searchQ, setSearchQ] = useState("");
+  const [showMenu, setShowMenu] = useState<string | null>(null);
 
   const filteredMembers = currentMembers.filter((m) =>
     !searchQ || m.name.toLowerCase().includes(searchQ.toLowerCase()) || m.email.toLowerCase().includes(searchQ.toLowerCase())
@@ -226,11 +227,24 @@ export default function TeamPage() {
                   <div className="hidden sm:block flex-1 min-w-0">
                     <p className="truncate" style={{ fontSize: "0.8125rem", color: "#6b7280" }}>{member.email}</p>
                   </div>
-                  <button className="p-2 rounded-lg transition-colors" style={{ color: "#9ca3af" }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = "#f3f4f6"}
-                    onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
-                    <MoreHorizontal className="w-4 h-4" />
-                  </button>
+                  <div className="relative">
+                    <button onClick={() => setShowMenu(showMenu === member.id ? null : member.id)} className="p-2 rounded-lg transition-colors" style={{ color: "#9ca3af" }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = "#f3f4f6"}
+                      onMouseLeave={(e) => { if (showMenu !== member.id) e.currentTarget.style.background = "transparent"; }}>
+                      <MoreHorizontal className="w-4 h-4" />
+                    </button>
+                    {showMenu === member.id && (
+                      <div className="absolute right-0 mt-1 w-40 rounded-xl border bg-white shadow-lg z-10 p-1" style={{ borderColor: "#f0f0ea" }}>
+                        <button onClick={() => { removeMember(member.id); setShowMenu(null); }}
+                          className="w-full text-left px-3 py-2 rounded-lg transition-colors text-sm flex items-center gap-2"
+                          style={{ color: "#ef4444" }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = "#fee2e2"}
+                          onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+                          <Trash2 className="w-4 h-4" /> Remove Member
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })}

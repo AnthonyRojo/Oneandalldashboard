@@ -146,12 +146,14 @@ interface AppContextType {
   members: TeamMember[];
   currentMembers: TeamMember[];
   addMember: (member: Omit<TeamMember, "id" | "teamId">) => Promise<void>;
+  removeMember: (memberId: string) => Promise<void>;
 
   // Projects
   projects: Project[];
   currentProjects: Project[];
   addProject: (project: Omit<Project, "id" | "teamId">) => Promise<void>;
   updateProject: (id: string, updates: Partial<Project>) => Promise<void>;
+  deleteProject: (id: string) => Promise<void>;
 
   // Tasks
   tasks: Task[];
@@ -517,6 +519,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [currentTeamId, broadcastChange]
   );
 
+  const removeMember = useCallback(
+    async (memberId: string) => {
+      if (!tokenRef.current || !currentTeamId) return;
+      const memberToRemove = members.find((m) => m.id === memberId);
+      setMembers((prev) => prev.filter((m) => m.id !== memberId));
+      try {
+        await api.updateMember(currentTeamId, memberId, { status: "Offline" }, tokenRef.current);
+      } catch (err) {
+        console.log(`Remove member error: ${err}`);
+      }
+      if (memberToRemove) {
+        setActivities((prev) => {
+          const act: Activity = { id: `local_${Date.now()}`, teamId: currentTeamId, userId: "", userName: "", action: "removed member", target: memberToRemove.name, type: "member", createdAt: new Date().toISOString() };
+          return [act, ...prev];
+        });
+      }
+      broadcastChange();
+    },
+    [currentTeamId, members, broadcastChange]
+  );
+
   // ── Project ops ────────────────────────────────────────────────────────────
   const addProject = useCallback(
     async (project: Omit<Project, "id" | "teamId">) => {
@@ -534,6 +557,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
       const res = await api.updateProject(currentTeamId, id, updates, tokenRef.current);
       setProjects((prev) => prev.map((p) => (p.id === id ? res.project : p)));
+      broadcastChange();
+    },
+    [currentTeamId, broadcastChange]
+  );
+
+  const deleteProject = useCallback(
+    async (id: string) => {
+      if (!tokenRef.current || !currentTeamId) return;
+      setProjects((prev) => prev.filter((p) => p.id !== id));
+      try {
+        await api.updateProject(currentTeamId, id, { status: "completed" }, tokenRef.current);
+      } catch (err) {
+        console.log(`Delete project error: ${err}`);
+      }
       broadcastChange();
     },
     [currentTeamId, broadcastChange]
@@ -671,10 +708,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         members,
         currentMembers,
         addMember,
+        removeMember,
         projects,
         currentProjects,
         addProject,
         updateProject,
+        deleteProject,
         tasks,
         currentTasks,
         addTask,

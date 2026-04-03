@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useApp } from "../context/AppContext";
-import { FolderOpen, CheckCircle, ListTodo, Users, Plus, Play, Square, Clock, TrendingUp, Video, Zap, Loader2, CalendarDays, AlertCircle } from "lucide-react";
+import { FolderOpen, CheckCircle, ListTodo, Users, Plus, Play, Square, Clock, TrendingUp, Video, Zap, Loader2, CalendarDays, AlertCircle, Trash2, MoreHorizontal } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell
 } from "recharts";
@@ -102,11 +102,12 @@ function TimeTracker() {
 }
 
 export default function DashboardPage() {
-  const { currentTeam, currentProjects, currentTasks, currentMembers, currentEvents, currentActivities, isDataLoading, createTeam, teams } = useApp();
+  const { currentTeam, currentProjects, currentTasks, currentMembers, currentEvents, currentActivities, isDataLoading, createTeam, teams, deleteProject } = useApp();
   const [showAddProject, setShowAddProject] = useState(false);
   const [newTeamName, setNewTeamName] = useState("");
   const [creatingTeam, setCreatingTeam] = useState(false);
   const [createTeamError, setCreateTeamError] = useState("");
+  const [projectMenu, setProjectMenu] = useState<string | null>(null);
 
   const handleCreateFirstTeam = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -364,6 +365,24 @@ export default function DashboardPage() {
                       <p style={{ fontSize: "0.75rem", color: "#9ca3af", marginTop: 4 }}>
                         {done}/{projectTasks.length} tasks · {project.dueDate ? `Due ${project.dueDate}` : "No deadline"}
                       </p>
+                    </div>
+                    <div className="relative flex-shrink-0">
+                      <button onClick={() => setProjectMenu(projectMenu === project.id ? null : project.id)} className="p-2 rounded-lg transition-colors" style={{ color: "#9ca3af" }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = "#f3f4f6"}
+                        onMouseLeave={(e) => { if (projectMenu !== project.id) e.currentTarget.style.background = "transparent"; }}>
+                        <MoreHorizontal className="w-4 h-4" />
+                      </button>
+                      {projectMenu === project.id && (
+                        <div className="absolute right-0 mt-1 w-40 rounded-xl border bg-white shadow-lg z-10 p-1" style={{ borderColor: "#f0f0ea" }}>
+                          <button onClick={() => { deleteProject(project.id); setProjectMenu(null); }}
+                            className="w-full text-left px-3 py-2 rounded-lg transition-colors text-sm flex items-center gap-2"
+                            style={{ color: "#ef4444" }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = "#fee2e2"}
+                            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+                            <Trash2 className="w-4 h-4" /> Archive Project
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

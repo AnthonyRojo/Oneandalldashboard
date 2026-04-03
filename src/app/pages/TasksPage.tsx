@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useApp, Task, TaskPriority, TaskStatus } from "../context/AppContext";
-import { Plus, Search, Filter, CheckCircle, Clock, AlertCircle, MessageSquare, X, Send, ChevronDown, Tag, Calendar } from "lucide-react";
+import { Plus, Search, Filter, CheckCircle, Clock, AlertCircle, MessageSquare, X, Send, ChevronDown, Tag, Calendar, Trash2 } from "lucide-react";
 
 const PRIORITY_CONFIG: Record<TaskPriority, { color: string; bg: string; label: string }> = {
   High: { color: "#ef4444", bg: "#fef2f2", label: "High" },
@@ -297,7 +297,7 @@ function TaskDetailModal({ task: initialTask, onClose }: { task: Task; onClose: 
 type TabType = "all" | "active" | "completed";
 
 export default function TasksPage() {
-  const { currentTasks, currentProjects, currentMembers } = useApp();
+  const { currentTasks, currentProjects, currentMembers, deleteTask } = useApp();
   const [tab, setTab] = useState<TabType>("all");
   const [searchQ, setSearchQ] = useState("");
   const [showCreate, setShowCreate] = useState(false);
@@ -432,6 +432,12 @@ export default function TasksPage() {
                       {assignee.avatar}
                     </div>
                   )}
+                  <button onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }} className="p-1.5 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                    style={{ color: "#ef4444" }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = "#fee2e2"}
+                    onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             );
