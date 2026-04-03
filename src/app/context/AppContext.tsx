@@ -447,7 +447,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       async (event, session) => {
         if (!mounted) return;
         if (event === "SIGNED_IN" && session?.user) {
-          // Handle new sign in — load user data
+          // Handle new sign in — clear old data and load user data
+          // Clear all old user data first
+          setMembers([]);
+          setProjects([]);
+          setTasks([]);
+          setEvents([]);
+          setAnnouncements([]);
+          setActivities([]);
+          setMessages([]);
+          setChatGroups([]);
+
           const user = session.user;
           const name = user.user_metadata?.name || user.email?.split("@")[0] || "User";
           const authUser: AuthUser = {
