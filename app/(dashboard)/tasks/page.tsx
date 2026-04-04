@@ -110,19 +110,46 @@ export default function TasksPage() {
 
   const handleAddComment = async () => {
     if (!selectedTask || !newComment.trim()) return;
-    await addTaskComment(selectedTask.id, newComment);
+    // Optimistic update - add comment immediately to UI
+    const optimisticComment = {
+      id: `temp-${Date.now()}`,
+      content: newComment,
+      authorId: currentUser?.id || "",
+      authorName: currentUser?.email?.split("@")[0] || "You",
+      createdAt: new Date().toISOString(),
+    };
+    setSelectedTask({
+      ...selectedTask,
+      comments: [...(selectedTask.comments || []), optimisticComment]
+    });
     setNewComment("");
+    // Update backend
+    await addTaskComment(selectedTask.id, newComment);
   };
 
   const handleEditComment = async (commentId: string) => {
     if (!selectedTask || !editingCommentContent.trim()) return;
-    await updateTaskComment(selectedTask.id, commentId, editingCommentContent);
+    // Optimistic update
+    setSelectedTask({
+      ...selectedTask,
+      comments: selectedTask.comments?.map(c => 
+        c.id === commentId ? { ...c, content: editingCommentContent } : c
+      ) || []
+    });
     setEditingCommentId(null);
     setEditingCommentContent("");
+    // Update backend
+    await updateTaskComment(selectedTask.id, commentId, editingCommentContent);
   };
 
   const handleDeleteComment = async (commentId: string) => {
     if (!selectedTask) return;
+    // Optimistic update
+    setSelectedTask({
+      ...selectedTask,
+      comments: selectedTask.comments?.filter(c => c.id !== commentId) || []
+    });
+    // Update backend
     await deleteTaskComment(selectedTask.id, commentId);
   };
 
@@ -317,7 +344,7 @@ export default function TasksPage() {
                     )}
                   </div>
                   {task.description && (
-                    <p className="text-sm truncate mb-2" style={{ color: "#6b7280" }}>{task.description}</p>
+                    <p className="text-sm line-clamp-2 mb-2 break-words" style={{ color: "#6b7280" }}>{task.description}</p>
                   )}
                   <div className="flex items-center gap-4 text-sm" style={{ color: "#9ca3af" }}>
                     {assignee && (
