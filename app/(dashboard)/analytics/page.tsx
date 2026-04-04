@@ -28,7 +28,10 @@ export default function AnalyticsPage() {
 
   // Calculate member stats
   const memberStats = currentMembers.map((member) => {
-    const memberTasks = currentTasks.filter((t) => t.assigneeId === member.id || t.assigneeIds?.includes(member.id));
+    const memberTasks = currentTasks.filter((t) => {
+      const assignedToMember = t.assigneeId === member.id || (Array.isArray(t.assigneeIds) && t.assigneeIds.includes(member.id));
+      return assignedToMember;
+    });
     const completedTasks = memberTasks.filter((t) => t.status === "completed").length;
     const memberActivities = currentActivities.filter((a) => a.userId === member.id);
     return {
