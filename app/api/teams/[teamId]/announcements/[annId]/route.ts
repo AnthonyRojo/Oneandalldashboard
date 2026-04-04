@@ -22,23 +22,26 @@ export async function PUT(
 
     const { data: announcement, error } = await supabase
       .from("announcements")
-      .update({ content, edited_at: new Date().toISOString() })
+      .update({ content, updated_at: new Date().toISOString() })
       .eq("id", annId)
       .eq("team_id", teamId)
-      .select(`
-        *,
-        author:created_by (id, name, email, avatar_url)
-      `)
+      .select()
       .single();
 
     if (error) throw error;
 
-    const author = announcement.author as Record<string, unknown> | null;
+    // Get author profile separately
+    const { data: author } = await supabase
+      .from("profiles")
+      .select("id, name, email, avatar_url")
+      .eq("id", announcement.author_id)
+      .single();
+
     const formatted = {
       id: announcement.id,
       teamId: announcement.team_id,
-      authorId: announcement.created_by,
-      authorName: author?.name || "Unknown",
+      authorId: announcement.author_id,
+      authorName: author?.name || announcement.author_name || "Unknown",
       content: announcement.content,
       type: announcement.type,
       pinned: announcement.pinned,
@@ -47,7 +50,7 @@ export async function PUT(
       pollOptions: announcement.poll_options,
       pollVotes: announcement.poll_votes,
       createdAt: announcement.created_at,
-      editedAt: announcement.edited_at,
+      editedAt: announcement.updated_at,
     };
 
     return success({ announcement: formatted });
