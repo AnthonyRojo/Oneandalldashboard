@@ -16,9 +16,9 @@ export default function AnalyticsPage() {
   };
 
   const tasksByPriority = {
-    low: currentTasks.filter((t) => t.priority === "low").length,
-    medium: currentTasks.filter((t) => t.priority === "medium").length,
-    high: currentTasks.filter((t) => t.priority === "high").length,
+    Low: currentTasks.filter((t) => t.priority === "Low").length,
+    Medium: currentTasks.filter((t) => t.priority === "Medium").length,
+    High: currentTasks.filter((t) => t.priority === "High").length,
   };
 
   const completionRate = currentTasks.length > 0 ? Math.round((tasksByStatus.completed / currentTasks.length) * 100) : 0;
@@ -95,7 +95,7 @@ export default function AnalyticsPage() {
           <div className="space-y-4">
             {Object.entries(tasksByPriority).map(([priority, count]) => {
               const percentage = currentTasks.length > 0 ? (count / currentTasks.length) * 100 : 0;
-              const colors: Record<string, string> = { low: "#22c55e", medium: "#f59e0b", high: "#ef4444" };
+              const colors: Record<string, string> = { Low: "#22c55e", Medium: "#f59e0b", High: "#ef4444" };
               return (
                 <div key={priority}>
                   <div className="flex items-center justify-between mb-1"><span className="text-sm capitalize" style={{ color: "#374151" }}>{priority}</span><span className="text-sm font-medium" style={{ color: "#6b7280" }}>{count}</span></div>

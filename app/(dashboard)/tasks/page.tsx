@@ -450,18 +450,26 @@ export default function TasksPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Assignee</label>
-                <select
-                  value={newTask.assigneeIds[0] || ""}
-                  onChange={(e) => setNewTask({ ...newTask, assigneeIds: e.target.value ? [e.target.value] : [] })}
-                  className="w-full px-4 py-2 rounded-xl border"
-                  style={{ borderColor: "#e5e7eb" }}
-                >
-                  <option value="">Select assignee</option>
+                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Assignees (select multiple)</label>
+                <div className="space-y-2 border rounded-xl p-3" style={{ borderColor: "#e5e7eb" }}>
                   {currentMembers.map((member) => (
-                    <option key={member.id} value={member.id}>{member.name}</option>
+                    <label key={member.id} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={newTask.assigneeIds.includes(member.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setNewTask({ ...newTask, assigneeIds: [...newTask.assigneeIds, member.id] });
+                          } else {
+                            setNewTask({ ...newTask, assigneeIds: newTask.assigneeIds.filter((id) => id !== member.id) });
+                          }
+                        }}
+                        className="rounded"
+                      />
+                      <span style={{ color: "#374151" }}>{member.name}</span>
+                    </label>
                   ))}
-                </select>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Approver (for submissions)</label>
@@ -597,18 +605,26 @@ export default function TasksPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Assignee</label>
-                <select
-                  value={editForm.assigneeIds[0] || ""}
-                  onChange={(e) => setEditForm({ ...editForm, assigneeIds: e.target.value ? [e.target.value] : [] })}
-                  className="w-full px-4 py-2 rounded-xl border"
-                  style={{ borderColor: "#e5e7eb" }}
-                >
-                  <option value="">Select assignee</option>
+                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Assignees (select multiple)</label>
+                <div className="space-y-2 border rounded-xl p-3" style={{ borderColor: "#e5e7eb" }}>
                   {currentMembers.map((member) => (
-                    <option key={member.id} value={member.id}>{member.name}</option>
+                    <label key={member.id} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editForm.assigneeIds.includes(member.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setEditForm({ ...editForm, assigneeIds: [...editForm.assigneeIds, member.id] });
+                          } else {
+                            setEditForm({ ...editForm, assigneeIds: editForm.assigneeIds.filter((id) => id !== member.id) });
+                          }
+                        }}
+                        className="rounded"
+                      />
+                      <span style={{ color: "#374151" }}>{member.name}</span>
+                    </label>
                   ))}
-                </select>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Project</label>

@@ -469,7 +469,8 @@ function CalendarDay({ day, events, isCurrentMonth, isToday: isTodayDay, onEvent
 
 function DraggableEvent({ event, onClick }: { event: CalendarEvent; onClick: () => void }) {
   const [{ isDragging }, drag] = useDrag(() => ({ type: "event", item: { id: event.id }, collect: (monitor) => ({ isDragging: monitor.isDragging() }) }), [event.id]);
-  return <button ref={drag as unknown as React.LegacyRef<HTMLButtonElement>} onClick={onClick} className="w-full text-left px-2 py-1 rounded text-xs truncate cursor-move transition-all border-l-4" style={{ background: `${EVENT_COLORS[event.type]}15`, color: EVENT_COLORS[event.type], borderColor: EVENT_COLORS[event.type], opacity: isDragging ? 0.5 : 1, borderRadius: "0.375rem" }}>{event.title}</button>;
+  const eventColor = EVENT_COLORS[event.type as EventType] || "#6b7280";
+  return <button ref={drag as unknown as React.LegacyRef<HTMLButtonElement>} onClick={onClick} className="w-full text-left px-2 py-1 rounded text-xs truncate cursor-move transition-all border-l-4" style={{ background: `${eventColor}15`, color: eventColor, borderColor: eventColor, opacity: isDragging ? 0.5 : 1, borderRadius: "0.375rem" }}>{event.title}</button>;
 }
 
 const MemoizedDraggableEvent = memo(DraggableEvent);
