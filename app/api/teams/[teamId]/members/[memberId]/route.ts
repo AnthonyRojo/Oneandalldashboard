@@ -25,15 +25,23 @@ export async function PUT(
     if (body.role) updateData.role = body.role.toLowerCase();
     if (body.status) updateData.status = body.status;
 
+    if (Object.keys(updateData).length === 0) {
+      return serverError("No fields to update");
+    }
+
     const { data: membership, error } = await supabase
       .from("team_members")
       .update(updateData)
       .eq("team_id", teamId)
       .eq("user_id", memberId)
-      .select()
-      .single();
+      .select();
 
     if (error) throw error;
+    if (!membership || membership.length === 0) {
+      return serverError("Member not found");
+    }
+
+    const memberData = membership[0];
 
     // Get profile
     const { data: profile } = await supabase
@@ -44,13 +52,13 @@ export async function PUT(
 
     const member = {
       id: memberId,
-      odid: membership.id,
+      odid: memberData.id,
       teamId,
       name: profile?.name || "Unknown",
       email: profile?.email || "",
       avatar: profile?.avatar_url || getInitials(profile?.name || "U"),
-      role: membership.role === "owner" ? "Owner" : membership.role === "admin" ? "Admin" : "Member",
-      status: membership.status || "Available",
+      role: memberData.role === "owner" ? "Owner" : memberData.role === "admin" ? "Admin" : "Member",
+      status: memberData.status || "Available",
     };
 
     return success({ member });
