@@ -354,6 +354,8 @@ export default function CalendarPage() {
     </div>
   );
 }
+
+function CalendarDay({ day, events, isCurrentMonth, isToday: isTodayDay, onEventClick }: { day: Date; events: CalendarEvent[]; isCurrentMonth: boolean; isToday: boolean; onEventClick: (event: CalendarEvent) => void }) {
   return (
     <div className="min-h-[100px] p-2 border-b border-r" style={{ borderColor: "#e5e7eb", background: isTodayDay ? "#fffbeb" : "transparent", opacity: isCurrentMonth ? 1 : 0.5 }}>
       <div className={`text-sm mb-1 ${isTodayDay ? "font-semibold" : ""}`} style={{ color: isTodayDay ? "#f59e0b" : "#374151" }}>{format(day, "d")}</div>
