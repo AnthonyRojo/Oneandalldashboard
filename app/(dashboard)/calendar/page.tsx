@@ -2,6 +2,8 @@
 
 import { useState, useCallback } from "react";
 import { useApp, CalendarEvent, EventType } from "@/context/AppContext";
+import { DndProvider, useDrag, useDrop } from "react-dnd";
+import { HTML5Backend } from "react-dnd-html5-backend";
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isToday, addMonths, subMonths } from "date-fns";
 import { ChevronLeft, ChevronRight, Plus, X, Clock, Video, Eye, FileText, Trash2, CalendarDays, Pencil } from "lucide-react";
 import DatePicker from "@/components/ui/DatePicker";
@@ -72,6 +74,15 @@ export default function CalendarPage() {
     return currentEvents.filter((event) => event.date === dateStr);
   };
 
+  const handleMoveEvent = useCallback(async (eventId: string, newDate: Date) => {
+    const event = currentEvents.find((e) => e.id === eventId);
+    if (!event) return;
+    const newDateStr = format(newDate, "yyyy-MM-dd");
+    const startDateTime = `${newDateStr}T${event.startTime.split("T")[1]}`;
+    const endDateTime = `${newDateStr}T${event.endTime.split("T")[1]}`;
+    await updateEvent(eventId, { startTime: startDateTime, endTime: endDateTime });
+  }, [currentEvents, updateEvent]);
+
   const handleCreateEvent = async () => {
     if (!newEvent.title || !newEvent.date || !newEvent.startTime) return;
     
@@ -86,8 +97,6 @@ export default function CalendarPage() {
     // Combine date with time to create full ISO timestamps
     const startDateTime = `${dateStr}T${newEvent.startTime}:00`;
     const endDateTime = `${dateStr}T${newEvent.endTime}:00`;
-    
-    console.log("[v0] Creating event with:", { dateStr, startDateTime, endDateTime });
     
     await addEvent({
       title: newEvent.title,
@@ -152,7 +161,8 @@ export default function CalendarPage() {
   };
 
   return (
-    <div className="p-6" style={{ background: "#fafaf7", minHeight: "100vh" }}>
+    <DndProvider backend={HTML5Backend}>
+      <div className="p-6" style={{ background: "#fafaf7", minHeight: "100vh" }}>
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -266,7 +276,7 @@ export default function CalendarPage() {
           </div>
           <div className="grid grid-cols-7">
             {calendarDays.map((day, i) => (
-              <CalendarDay key={i} day={day} events={getEventsForDay(day)} isCurrentMonth={isSameMonth(day, currentMonth)} isToday={isToday(day)} onEventClick={setSelectedEvent} />
+              <CalendarDay key={i} day={day} events={getEventsForDay(day)} isCurrentMonth={isSameMonth(day, currentMonth)} isToday={isToday(day)} onEventClick={setSelectedEvent} onEventDrop={handleMoveEvent} />
             ))}
           </div>
         </div>
@@ -300,7 +310,6 @@ export default function CalendarPage() {
                     onChange={(val) => {
                       const dateStr = val instanceof Date ? format(val, "yyyy-MM-dd") : (typeof val === "string" ? val : "");
                       setNewEvent({ ...newEvent, date: dateStr });
-                      console.log("[v0] DatePicker changed to:", { val, dateStr });
                     }} 
                   />
                 </div>
@@ -374,19 +383,24 @@ export default function CalendarPage() {
         </div>
       )}
     </div>
+    </DndProvider>
   );
 }
 
-function CalendarDay({ day, events, isCurrentMonth, isToday: isTodayDay, onEventClick }: { day: Date; events: CalendarEvent[]; isCurrentMonth: boolean; isToday: boolean; onEventClick: (event: CalendarEvent) => void }) {
+function CalendarDay({ day, events, isCurrentMonth, isToday: isTodayDay, onEventClick, onEventDrop }: { day: Date; events: CalendarEvent[]; isCurrentMonth: boolean; isToday: boolean; onEventClick: (event: CalendarEvent) => void; onEventDrop: (eventId: string, newDate: Date) => void; }) {
+  const [{ isOver }, drop] = useDrop(() => ({ accept: "event", drop: (item: { id: string }) => { onEventDrop(item.id, day); }, collect: (monitor) => ({ isOver: monitor.isOver() }) }), [day, onEventDrop]);
   return (
-    <div className="min-h-[100px] p-2 border-b border-r" style={{ borderColor: "#e5e7eb", background: isTodayDay ? "#fffbeb" : "transparent", opacity: isCurrentMonth ? 1 : 0.5 }}>
+    <div ref={drop as unknown as React.LegacyRef<HTMLDivElement>} className="min-h-[100px] p-2 border-b border-r transition-colors" style={{ borderColor: "#e5e7eb", background: isOver ? "#fef3c7" : isTodayDay ? "#fffbeb" : "transparent", opacity: isCurrentMonth ? 1 : 0.5 }}>
       <div className={`text-sm mb-1 ${isTodayDay ? "font-semibold" : ""}`} style={{ color: isTodayDay ? "#f59e0b" : "#374151" }}>{format(day, "d")}</div>
       <div className="space-y-1">
-        {events.slice(0, 3).map((event) => (
-          <button key={event.id} onClick={() => onEventClick(event)} className="w-full text-left px-2 py-1 rounded text-xs truncate cursor-pointer transition-opacity hover:opacity-80" style={{ background: `${EVENT_COLORS[event.type]}20`, color: EVENT_COLORS[event.type] }}>{event.title}</button>
-        ))}
+        {events.slice(0, 3).map((event) => <DraggableEvent key={event.id} event={event} onClick={() => onEventClick(event)} />)}
         {events.length > 3 && <div className="text-xs" style={{ color: "#6b7280" }}>+{events.length - 3} more</div>}
       </div>
     </div>
   );
+}
+
+function DraggableEvent({ event, onClick }: { event: CalendarEvent; onClick: () => void }) {
+  const [{ isDragging }, drag] = useDrag(() => ({ type: "event", item: { id: event.id }, collect: (monitor) => ({ isDragging: monitor.isDragging() }) }), [event.id]);
+  return <button ref={drag as unknown as React.LegacyRef<HTMLButtonElement>} onClick={onClick} className="w-full text-left px-2 py-1 rounded text-xs truncate cursor-move transition-all border-l-4" style={{ background: `${EVENT_COLORS[event.type]}15`, color: EVENT_COLORS[event.type], borderColor: EVENT_COLORS[event.type], opacity: isDragging ? 0.5 : 1, borderRadius: "0.375rem" }}>{event.title}</button>;
 }
