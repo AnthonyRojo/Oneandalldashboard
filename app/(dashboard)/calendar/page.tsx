@@ -75,10 +75,19 @@ export default function CalendarPage() {
   const handleCreateEvent = async () => {
     if (!newEvent.title || !newEvent.date || !newEvent.startTime) return;
     
+    // Ensure date is in YYYY-MM-DD format
+    let dateStr = newEvent.date;
+    if (newEvent.date instanceof Date) {
+      dateStr = format(newEvent.date, "yyyy-MM-dd");
+    } else if (typeof newEvent.date === "object") {
+      dateStr = format(new Date(newEvent.date as any), "yyyy-MM-dd");
+    }
+    
     // Combine date with time to create full ISO timestamps
-    const dateStr = newEvent.date;
     const startDateTime = `${dateStr}T${newEvent.startTime}:00`;
     const endDateTime = `${dateStr}T${newEvent.endTime}:00`;
+    
+    console.log("[v0] Creating event with:", { dateStr, startDateTime, endDateTime });
     
     await addEvent({
       title: newEvent.title,
@@ -285,7 +294,15 @@ export default function CalendarPage() {
                   </select>
                 </div>
                 <div>
-                  <DatePicker label="Date" value={newEvent.date} onChange={(val) => setNewEvent({ ...newEvent, date: val })} />
+                  <DatePicker 
+                    label="Date" 
+                    value={newEvent.date ? new Date(newEvent.date) : undefined} 
+                    onChange={(val) => {
+                      const dateStr = val instanceof Date ? format(val, "yyyy-MM-dd") : (typeof val === "string" ? val : "");
+                      setNewEvent({ ...newEvent, date: dateStr });
+                      console.log("[v0] DatePicker changed to:", { val, dateStr });
+                    }} 
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>

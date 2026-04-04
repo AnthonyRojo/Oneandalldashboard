@@ -15,6 +15,13 @@ export default function AnalyticsPage() {
     completed: currentTasks.filter((t) => t.status === "completed").length,
   };
 
+  // Debug logging
+  if (typeof window !== "undefined") {
+    console.log("[v0] Analytics tasks count:", currentTasks.length);
+    console.log("[v0] Task statuses:", currentTasks.map(t => t.status));
+    console.log("[v0] tasksByStatus:", tasksByStatus);
+  }
+
   const tasksByPriority = {
     low: currentTasks.filter((t) => t.priority === "low").length,
     medium: currentTasks.filter((t) => t.priority === "medium").length,
