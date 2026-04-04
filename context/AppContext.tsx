@@ -16,7 +16,7 @@ import { api } from "@/lib/api";
 export type UserRole = "Owner" | "Admin" | "Member";
 export type MemberStatus = "Available" | "Busy" | "Away" | "Offline";
 export type TaskPriority = "Low" | "Medium" | "High";
-export type TaskStatus = "todo" | "in-progress" | "completed";
+export type TaskStatus = "todo" | "in-progress" | "review" | "completed";
 export type EventType = "Meeting" | "Review" | "Post" | "Other";
 export type AnnouncementType = "update" | "poll" | "question";
 export type ActivityType = "task" | "project" | "member" | "announcement" | "event" | "comment" | "submit" | "team";
