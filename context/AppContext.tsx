@@ -634,7 +634,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const signup = useCallback(
     async (name: string, email: string, password: string): Promise<{ success: boolean; error?: string }> => {
       try {
-        await api.signup(name, email, password);
+        // Use Supabase Auth directly for signup
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { name },
+          },
+        });
+        
+        if (error) {
+          console.log(`Signup error: ${error.message}`);
+          return { success: false, error: error.message };
+        }
+        
+        // If email confirmation is required, notify the user
+        if (data.user && !data.session) {
+          return { success: true, error: "Please check your email to confirm your account." };
+        }
+        
+        // If session exists, user is signed in automatically
+        if (data.session) {
+          return { success: true };
+        }
+        
+        // Fallback: try to log in
         const ok = await login(email, password);
         if (!ok) return { success: false, error: "Account created but sign in failed. Please try logging in." };
         return { success: true };
