@@ -78,11 +78,12 @@ export default function CalendarPage() {
     if (!newEvent.title || !newEvent.date || !newEvent.startTime) return;
     
     // Ensure date is in YYYY-MM-DD format
-    let dateStr = newEvent.date;
-    if (newEvent.date instanceof Date) {
-      dateStr = format(newEvent.date, "yyyy-MM-dd");
-    } else if (typeof newEvent.date === "object") {
-      dateStr = format(new Date(newEvent.date as any), "yyyy-MM-dd");
+    // Ensure date is in YYYY-MM-DD format
+    let dateStr: any = newEvent.date;
+    if (dateStr instanceof Date) {
+      dateStr = format(dateStr, "yyyy-MM-dd");
+    } else if (typeof dateStr === "object" && dateStr !== null) {
+      dateStr = format(new Date(dateStr), "yyyy-MM-dd");
     }
     
     // Combine date with time to create full ISO timestamps
