@@ -64,6 +64,8 @@ export default function TasksPage() {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showPriorityDropdown, setShowPriorityDropdown] = useState(false);
   const [approvalFeedback, setApprovalFeedback] = useState<{ taskId: string; approved: boolean } | null>(null);
+  const [editTag, setEditTag] = useState("");
+  const [editNewTag, setEditNewTag] = useState("");
 
   // For task editing modal
   const [editForm, setEditForm] = useState({
@@ -80,6 +82,13 @@ export default function TasksPage() {
   });
   const currentUserRole = currentMembers.find((m) => m.id === currentUser?.id)?.role?.toLowerCase();
   const canApprove = currentUserRole === "owner" || currentUserRole === "admin";
+  
+  if (typeof window !== "undefined" && currentUser) {
+    console.log("[v0] Current user:", currentUser.id, currentUser.name);
+    console.log("[v0] Current user role:", currentUserRole);
+    console.log("[v0] Can approve:", canApprove);
+    console.log("[v0] All members:", currentMembers.map(m => ({ id: m.id, name: m.name, role: m.role })));
+  }
 
   const filteredTasks = currentTasks.filter((task) => {
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
