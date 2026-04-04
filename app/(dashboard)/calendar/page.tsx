@@ -91,13 +91,8 @@ export default function CalendarPage() {
   const handleCreateEvent = async () => {
     if (!newEvent.title || !newEvent.date || !newEvent.startTime) return;
     
-    // Ensure date is in YYYY-MM-DD format
-    let dateStr = newEvent.date;
-    if (newEvent.date instanceof Date) {
-      dateStr = format(newEvent.date, "yyyy-MM-dd");
-    } else if (typeof newEvent.date === "object") {
-      dateStr = format(new Date(newEvent.date as any), "yyyy-MM-dd");
-    }
+    // Date is already in YYYY-MM-DD format from the input
+    const dateStr = newEvent.date;
     
     // Combine date with time to create full ISO timestamps
     const startDateTime = `${dateStr}T${newEvent.startTime}:00`;
