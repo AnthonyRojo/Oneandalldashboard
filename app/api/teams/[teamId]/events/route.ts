@@ -65,6 +65,11 @@ export async function POST(
     const parseDateTime = (input: string | Date | undefined): string | null => {
       if (!input) return null;
       const date = input instanceof Date ? input : new Date(input);
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        console.log("[v0] Invalid date input:", input);
+        return null;
+      }
       // Return ISO string with timezone
       return date.toISOString();
     };
@@ -76,7 +81,7 @@ export async function POST(
     const endTimeISO = parseDateTime(endTime);
     
     if (!startTimeISO) {
-      return serverError("Start time is required");
+      return serverError("Start time is required and must be a valid date");
     }
     
     const { data: event, error } = await supabase
