@@ -110,11 +110,6 @@ export default function CalendarPage() {
     setNewEvent({ title: "", description: "", type: "Meeting", date: "", startTime: "09:00", endTime: "10:00", link: "" });
   };
 
-  const handleMoveEvent = useCallback(async (eventId: string, newDate: Date) => {
-    const newDateStr = format(newDate, "yyyy-MM-dd");
-    await updateEvent(eventId, { date: newDateStr });
-  }, [updateEvent]);
-
   const openEditModal = (event: CalendarEvent) => {
     setEditingEvent(event);
     setEditForm({
