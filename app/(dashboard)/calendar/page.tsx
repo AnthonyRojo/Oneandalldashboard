@@ -331,7 +331,7 @@ export default function CalendarPage() {
                   <DatePicker 
                     label="Date" 
                     value={newEvent.date ? new Date(newEvent.date) : undefined} 
-                    onChange={(val) => {
+                    onChange={(val: any) => {
                       const dateStr = val instanceof Date ? format(val, "yyyy-MM-dd") : (typeof val === "string" ? val : "");
                       setNewEvent({ ...newEvent, date: dateStr });
                     }} 
