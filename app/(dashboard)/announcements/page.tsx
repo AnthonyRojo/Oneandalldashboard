@@ -203,14 +203,14 @@ export default function AnnouncementsPage() {
           return (
             <div key={announcement.id} className="p-6 rounded-2xl border" style={{ background: "white", borderColor: announcement.pinned ? "#f59e0b" : "#e5e7eb" }}>
               <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${TYPE_CONFIG[announcement.type].color}20` }}>
-                  <TypeIcon className="w-5 h-5" style={{ color: TYPE_CONFIG[announcement.type].color }} />
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${typeConfig.color}20` }}>
+                  <TypeIcon className="w-5 h-5" style={{ color: typeConfig.color }} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2">
                     {announcement.pinned && <Pin className="w-4 h-4" style={{ color: "#f59e0b" }} />}
                     <span className="font-medium" style={{ color: "#111827" }}>{author?.name || announcement.authorName || "Unknown"}</span>
-                    <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: `${TYPE_CONFIG[announcement.type].color}20`, color: TYPE_CONFIG[announcement.type].color }}>{TYPE_CONFIG[announcement.type].label}</span>
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: `${typeConfig.color}20`, color: typeConfig.color }}>{typeConfig.label}</span>
                     <span className="text-xs" style={{ color: "#9ca3af" }}>{new Date(announcement.createdAt).toLocaleDateString()}</span>
                     {announcement.editedAt && <span className="text-xs" style={{ color: "#9ca3af" }}>(edited)</span>}
                   </div>
