@@ -436,7 +436,7 @@ export default function CalendarPage() {
                 <DatePicker 
                   label="Date" 
                   value={editForm.date ? new Date(editForm.date) : undefined} 
-                  onChange={(val) => {
+                  onChange={(val: any) => {
                     const dateStr = val instanceof Date ? format(val, "yyyy-MM-dd") : (typeof val === "string" ? val : "");
                     setEditForm({ ...editForm, date: dateStr });
                   }} 
@@ -491,7 +491,7 @@ function CalendarDay({ day, events, isCurrentMonth, isToday: isTodayDay, onEvent
   );
 }
 
-function DraggableEvent({ event, onClick }: { event: CalendarEvent; onClick: () => void }) {
+function DraggableEvent({ event, onClick }: { event: CalendarEvent; onClick: (e: any) => void }) {
   const [{ isDragging }, drag] = useDrag(() => ({ type: "event", item: { id: event.id }, collect: (monitor) => ({ isDragging: monitor.isDragging() }) }), [event.id]);
   const eventColor = EVENT_COLORS[event.type as EventType] || "#6b7280";
   return <button ref={drag as unknown as React.LegacyRef<HTMLButtonElement>} onClick={onClick} className="w-full text-left px-2 py-1 rounded text-xs truncate cursor-move transition-all border-l-4" style={{ background: `${eventColor}15`, color: eventColor, borderColor: eventColor, opacity: isDragging ? 0.5 : 1, borderRadius: "0.375rem" }}>{event.title}</button>;
