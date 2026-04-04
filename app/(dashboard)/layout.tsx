@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
 import { useApp, ChatMessage } from "@/context/AppContext";
 import {
   LayoutDashboard, CheckSquare, Calendar, Megaphone, BarChart2,
@@ -241,10 +242,10 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
             {NAV_ITEMS.map(({ label, icon: Icon, path }) => {
               const active = pathname === path;
               return (
-                <button key={path} onClick={() => { router.push(path); setSidebarOpen(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left" style={{ background: active ? "rgba(245,158,11,0.15)" : "transparent", color: active ? "#f59e0b" : "#9ca3af" }}>
+                <Link key={path} href={path} prefetch={true} onClick={() => setSidebarOpen(false)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left" style={{ background: active ? "rgba(245,158,11,0.15)" : "transparent", color: active ? "#f59e0b" : "#9ca3af" }}>
                   <Icon className="w-4 h-4 flex-shrink-0" />
                   <span style={{ fontSize: "0.875rem", fontWeight: active ? 600 : 400 }}>{label}</span>
-                </button>
+                </Link>
               );
             })}
           </div>
@@ -254,10 +255,10 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
               {BOTTOM_ITEMS.map(({ label, icon: Icon, path }) => {
                 const active = pathname === path;
                 return (
-                  <button key={path} onClick={() => { router.push(path); setSidebarOpen(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left" style={{ background: active ? "rgba(245,158,11,0.15)" : "transparent", color: active ? "#f59e0b" : "#9ca3af" }}>
+                  <Link key={path} href={path} prefetch={true} onClick={() => setSidebarOpen(false)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left" style={{ background: active ? "rgba(245,158,11,0.15)" : "transparent", color: active ? "#f59e0b" : "#9ca3af" }}>
                     <Icon className="w-4 h-4 flex-shrink-0" />
                     <span style={{ fontSize: "0.875rem", fontWeight: active ? 600 : 400 }}>{label}</span>
-                  </button>
+                  </Link>
                 );
               })}
               <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left" style={{ color: "#9ca3af" }}
@@ -317,9 +318,9 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
                       const icon = ({ task: "✅", project: "📁", member: "👤", announcement: "📢", event: "📅", comment: "💬", submit: "📤", team: "🏠" } as Record<string, string>)[n.type] || "📌";
                       const isNew = n.createdAt > lastReadNotif;
                       return (
-                        <button key={n.id} className="w-full text-left px-4 py-3 flex items-start gap-3 border-b last:border-b-0 transition-all"
+                        <Link key={n.id} href={NOTIF_NAV[n.type] || "/dashboard"} prefetch={true} className="w-full text-left px-4 py-3 flex items-start gap-3 border-b last:border-b-0 transition-all"
                           style={{ background: isNew ? "#fffbeb" : "transparent", borderColor: "#f0f0ea" }}
-                          onClick={() => { router.push(NOTIF_NAV[n.type] || "/dashboard"); setNotifOpen(false); }}
+                          onClick={() => setNotifOpen(false)}
                           onMouseEnter={(e) => e.currentTarget.style.background = isNew ? "#fef9e7" : "#f9f9f6"}
                           onMouseLeave={(e) => e.currentTarget.style.background = isNew ? "#fffbeb" : "transparent"}>
                           <span style={{ fontSize: "1rem", lineHeight: 1, marginTop: 1 }}>{icon}</span>
@@ -331,7 +332,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
                             <p style={{ fontSize: "0.75rem", color: "#9ca3af", marginTop: 2 }}>{timeAgo(n.createdAt)}</p>
                           </div>
                           {isNew && <div className="w-2 h-2 rounded-full flex-shrink-0 mt-1.5" style={{ background: "#f59e0b" }} />}
-                        </button>
+                        </Link>
                       );
                     })}
                   </div>
@@ -493,8 +494,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
                     <p style={{ fontSize: "0.75rem", color: "#6b7280" }}>{currentUser?.email}</p>
                   </div>
                   <div className="p-2">
-                    <button onClick={() => { router.push("/settings"); setProfileOpen(false); }} className="w-full text-left px-3 py-2 rounded-xl transition-colors" style={{ fontSize: "0.875rem", color: "#374151" }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = "#f9f9f6"} onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>Settings</button>
+                    <Link href="/settings" prefetch={true} onClick={() => setProfileOpen(false)} className="block w-full text-left px-3 py-2 rounded-xl transition-colors hover:bg-[#f9f9f6]" style={{ fontSize: "0.875rem", color: "#374151" }}>Settings</Link>
                     <button onClick={handleLogout} className="w-full text-left px-3 py-2 rounded-xl transition-colors" style={{ fontSize: "0.875rem", color: "#ef4444" }}
                       onMouseEnter={(e) => e.currentTarget.style.background = "#fef2f2"} onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>Logout</button>
                   </div>
