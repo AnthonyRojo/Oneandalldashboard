@@ -20,7 +20,7 @@ export default function AnalyticsPage() {
   };
 
   const completionRate = currentTasks.length > 0 ? Math.round((tasksByStatus.completed / currentTasks.length) * 100) : 0;
-  const upcomingEvents = currentEvents.filter((e) => new Date(e.startDate) > new Date()).sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()).slice(0, 5);
+  const upcomingEvents = currentEvents.filter((e) => new Date(e.date) > new Date()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).slice(0, 5);
   const recentActivities = [...currentActivities].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 10);
 
   const stats = [
@@ -94,7 +94,7 @@ export default function AnalyticsPage() {
               {upcomingEvents.map((event) => (
                 <div key={event.id} className="flex items-center gap-3 p-3 rounded-xl" style={{ background: "#f9fafb" }}>
                   <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: "#3b82f620" }}><Calendar className="w-5 h-5" style={{ color: "#3b82f6" }} /></div>
-                  <div className="flex-1 min-w-0"><p className="font-medium truncate" style={{ color: "#111827" }}>{event.title}</p><p className="text-sm" style={{ color: "#6b7280" }}>{new Date(event.startDate).toLocaleDateString()}</p></div>
+                  <div className="flex-1 min-w-0"><p className="font-medium truncate" style={{ color: "#111827" }}>{event.title}</p><p className="text-sm" style={{ color: "#6b7280" }}>{new Date(event.date).toLocaleDateString()}</p></div>
                 </div>
               ))}
             </div>
