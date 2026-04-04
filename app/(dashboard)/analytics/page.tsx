@@ -10,7 +10,7 @@ export default function AnalyticsPage() {
     todo: currentTasks.filter((t) => t.status === "todo").length,
     "in-progress": currentTasks.filter((t) => t.status === "in-progress").length,
     review: currentTasks.filter((t) => t.status === "review").length,
-    done: currentTasks.filter((t) => t.status === "done").length,
+    completed: currentTasks.filter((t) => t.status === "completed").length,
   };
 
   const tasksByPriority = {
@@ -19,7 +19,7 @@ export default function AnalyticsPage() {
     high: currentTasks.filter((t) => t.priority === "high").length,
   };
 
-  const completionRate = currentTasks.length > 0 ? Math.round((tasksByStatus.done / currentTasks.length) * 100) : 0;
+  const completionRate = currentTasks.length > 0 ? Math.round((tasksByStatus.completed / currentTasks.length) * 100) : 0;
   const upcomingEvents = currentEvents.filter((e) => new Date(e.startDate) > new Date()).sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()).slice(0, 5);
   const recentActivities = [...currentActivities].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 10);
 
@@ -59,8 +59,8 @@ export default function AnalyticsPage() {
           <div className="space-y-4">
             {Object.entries(tasksByStatus).map(([status, count]) => {
               const percentage = currentTasks.length > 0 ? (count / currentTasks.length) * 100 : 0;
-              const colors: Record<string, string> = { todo: "#6b7280", "in-progress": "#3b82f6", review: "#f59e0b", done: "#22c55e" };
-              const labels: Record<string, string> = { todo: "To Do", "in-progress": "In Progress", review: "Review", done: "Done" };
+              const colors: Record<string, string> = { todo: "#6b7280", "in-progress": "#3b82f6", review: "#f59e0b", completed: "#22c55e" };
+              const labels: Record<string, string> = { todo: "To Do", "in-progress": "In Progress", review: "Review", completed: "Done" };
               return (
                 <div key={status}>
                   <div className="flex items-center justify-between mb-1"><span className="text-sm" style={{ color: "#374151" }}>{labels[status]}</span><span className="text-sm font-medium" style={{ color: "#6b7280" }}>{count}</span></div>
