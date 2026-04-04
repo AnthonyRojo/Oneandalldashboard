@@ -1,15 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useApp } from "@/context/AppContext";
-import { User, Bell, Lock, Palette, Save, Eye, EyeOff, Check } from "lucide-react";
+import { User, Bell, Lock, Save, Eye, EyeOff, Check } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 
 export default function SettingsPage() {
-  const { currentUser, updateProfile } = useApp();
+  const { currentUser } = useApp();
   const [activeTab, setActiveTab] = useState("profile");
-  const [name, setName] = useState(currentUser?.name || "");
-  const [email, setEmail] = useState(currentUser?.email || "");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -20,12 +20,23 @@ export default function SettingsPage() {
   const [error, setError] = useState("");
   const [notifications, setNotifications] = useState({ email: true, push: true, tasks: true, announcements: true });
 
+  useEffect(() => {
+    if (currentUser) {
+      setName(currentUser.name || "");
+      setEmail(currentUser.email || "");
+    }
+  }, [currentUser]);
+
   const handleSaveProfile = async () => {
     setSaving(true);
     setError("");
     setSuccess(false);
     try {
-      await updateProfile({ name, email });
+      const { error: updateError } = await supabase.auth.updateUser({
+        email: email !== currentUser?.email ? email : undefined,
+        data: { name },
+      });
+      if (updateError) throw updateError;
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
@@ -69,11 +80,11 @@ export default function SettingsPage() {
         <p style={{ color: "#6b7280", fontSize: "0.875rem" }}>Manage your account preferences</p>
       </div>
 
-      <div className="flex gap-6">
-        <div className="w-48 flex-shrink-0">
-          <div className="space-y-1">
+      <div className="flex flex-col md:flex-row gap-6">
+        <div className="md:w-48 flex-shrink-0">
+          <div className="flex md:flex-col gap-1">
             {tabs.map((tab) => (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-left transition-colors`} style={{ background: activeTab === tab.id ? "#f59e0b" : "transparent", color: activeTab === tab.id ? "white" : "#374151" }}>
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-left transition-colors" style={{ background: activeTab === tab.id ? "#f59e0b" : "transparent", color: activeTab === tab.id ? "white" : "#374151" }}>
                 <tab.icon className="w-4 h-4" /> {tab.label}
               </button>
             ))}
@@ -96,7 +107,7 @@ export default function SettingsPage() {
                   <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Email Address</label>
                   <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-4 py-2 rounded-xl border" style={{ borderColor: "#e5e7eb" }} />
                 </div>
-                <button onClick={handleSaveProfile} disabled={saving} className="flex items-center gap-2 px-4 py-2 rounded-xl text-white" style={{ background: "#f59e0b" }}>
+                <button onClick={handleSaveProfile} disabled={saving} className="flex items-center gap-2 px-4 py-2 rounded-xl text-white" style={{ background: "#f59e0b", opacity: saving ? 0.7 : 1 }}>
                   <Save className="w-4 h-4" /> {saving ? "Saving..." : "Save Changes"}
                 </button>
               </div>
@@ -142,7 +153,7 @@ export default function SettingsPage() {
                   <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Confirm New Password</label>
                   <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full px-4 py-2 rounded-xl border" style={{ borderColor: "#e5e7eb" }} />
                 </div>
-                <button onClick={handleChangePassword} disabled={saving} className="flex items-center gap-2 px-4 py-2 rounded-xl text-white" style={{ background: "#f59e0b" }}>
+                <button onClick={handleChangePassword} disabled={saving} className="flex items-center gap-2 px-4 py-2 rounded-xl text-white" style={{ background: "#f59e0b", opacity: saving ? 0.7 : 1 }}>
                   <Lock className="w-4 h-4" /> {saving ? "Updating..." : "Update Password"}
                 </button>
               </div>
