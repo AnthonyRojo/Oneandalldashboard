@@ -29,7 +29,6 @@ export async function PUT(
     if (updates.start !== undefined) updateData.start_time = updates.start;
     if (updates.end !== undefined) updateData.end_time = updates.end;
     if (updates.type !== undefined) updateData.type = updates.type;
-    if (updates.link !== undefined) updateData.link = updates.link;
     if (updates.location !== undefined) updateData.location = updates.location;
     if (updates.color !== undefined) updateData.color = updates.color;
 
@@ -52,7 +51,6 @@ export async function PUT(
       startTime: event.start_time,
       endTime: event.end_time,
       type: event.type,
-      link: event.link,
       location: event.location,
       color: event.color,
       createdAt: event.created_at,
