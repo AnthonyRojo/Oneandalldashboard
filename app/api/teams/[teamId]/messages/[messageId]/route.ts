@@ -22,26 +22,22 @@ export async function PUT(
 
     const { data: message, error } = await supabase
       .from("messages")
-      .update({ content, edited_at: new Date().toISOString() })
+      .update({ content, updated_at: new Date().toISOString() })
       .eq("id", messageId)
       .eq("team_id", teamId)
-      .select(`
-        *,
-        sender:sender_id (id, name, email, avatar_url)
-      `)
+      .select("*")
       .single();
 
     if (error) throw error;
 
-    const sender = message.sender as Record<string, unknown> | null;
     const formatted = {
       id: message.id,
       teamId: message.team_id,
       authorId: message.sender_id,
-      authorName: sender?.name || "Unknown",
+      authorName: message.sender_name || "Unknown",
       content: message.content,
       createdAt: message.created_at,
-      editedAt: message.edited_at,
+      editedAt: message.updated_at,
     };
 
     return success({ message: formatted });

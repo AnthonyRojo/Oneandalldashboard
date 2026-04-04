@@ -50,6 +50,8 @@ function ProjectDetailModal({ project: initialProject, onClose }: { project: Pro
 
   const projectTasks = currentTasks.filter((t) => t.projectId === project.id);
   const doneTasks = projectTasks.filter((t) => t.status === "completed").length;
+  // Calculate progress based on task completion
+  const calculatedProgress = projectTasks.length > 0 ? Math.round((doneTasks / projectTasks.length) * 100) : 0;
   const overdue = project.dueDate && project.status !== "completed" && new Date(project.dueDate) < new Date(new Date().toDateString());
 
   const handleSave = () => {
@@ -124,9 +126,9 @@ function ProjectDetailModal({ project: initialProject, onClose }: { project: Pro
           <div className="p-6 space-y-6">
             {project.description && <p style={{ color: "#6b7280", fontSize: "0.875rem", lineHeight: 1.6 }}>{project.description}</p>}
             <div className="space-y-3">
-              <div className="flex justify-between text-sm"><span style={{ color: "#6b7280" }}>Progress</span><span style={{ color: "#111827", fontWeight: 600 }}>{project.progress}%</span></div>
+              <div className="flex justify-between text-sm"><span style={{ color: "#6b7280" }}>Progress</span><span style={{ color: "#111827", fontWeight: 600 }}>{calculatedProgress}%</span></div>
               <div className="h-2 rounded-full overflow-hidden" style={{ background: "#e5e7eb" }}>
-                <div className="h-full rounded-full transition-all" style={{ width: `${project.progress}%`, background: project.color }} />
+                <div className="h-full rounded-full transition-all" style={{ width: `${calculatedProgress}%`, background: project.color }} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -239,7 +241,12 @@ export default function DashboardPage() {
     return { day: date.toLocaleDateString("en-US", { weekday: "short" }), tasks };
   });
 
-  const projectProgress = currentProjects.slice(0, 5).map((p) => ({ name: p.name.slice(0, 12), progress: p.progress, color: p.color }));
+  const projectProgress = currentProjects.slice(0, 5).map((p) => {
+    const pTasks = currentTasks.filter((t) => t.projectId === p.id);
+    const pDone = pTasks.filter((t) => t.status === "completed").length;
+    const calcProgress = pTasks.length > 0 ? Math.round((pDone / pTasks.length) * 100) : 0;
+    return { name: p.name.slice(0, 12), progress: calcProgress, color: p.color };
+  });
 
   const upcomingEvents = [...currentEvents].filter((e) => new Date(e.date) >= new Date(new Date().toDateString())).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).slice(0, 4);
 
@@ -326,20 +333,25 @@ export default function DashboardPage() {
             <button onClick={() => setAddProjectOpen(true)} className="p-2 rounded-xl" style={{ color: "#f59e0b" }}><Plus className="w-4 h-4" /></button>
           </div>
           <div className="divide-y" style={{ borderColor: "#f0f0ea" }}>
-            {currentProjects.slice(0, 5).map((p) => (
-              <button key={p.id} onClick={() => setSelectedProject(p)} className="w-full text-left px-6 py-4 flex items-center gap-3 hover:bg-gray-50 transition-colors">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold" style={{ background: p.color }}>{p.name[0]}</div>
-                <div className="flex-1 min-w-0">
-                  <p className="truncate" style={{ color: "#111827", fontWeight: 500 }}>{p.name}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "#e5e7eb" }}>
-                      <div className="h-full rounded-full" style={{ width: `${p.progress}%`, background: p.color }} />
+            {currentProjects.slice(0, 5).map((p) => {
+              const pTasks = currentTasks.filter((t) => t.projectId === p.id);
+              const pDone = pTasks.filter((t) => t.status === "completed").length;
+              const pProgress = pTasks.length > 0 ? Math.round((pDone / pTasks.length) * 100) : 0;
+              return (
+                <button key={p.id} onClick={() => setSelectedProject(p)} className="w-full text-left px-6 py-4 flex items-center gap-3 hover:bg-gray-50 transition-colors">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold" style={{ background: p.color }}>{p.name[0]}</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate" style={{ color: "#111827", fontWeight: 500 }}>{p.name}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "#e5e7eb" }}>
+                        <div className="h-full rounded-full" style={{ width: `${pProgress}%`, background: p.color }} />
+                      </div>
+                      <span style={{ color: "#6b7280", fontSize: "0.75rem" }}>{pProgress}%</span>
                     </div>
-                    <span style={{ color: "#6b7280", fontSize: "0.75rem" }}>{p.progress}%</span>
                   </div>
-                </div>
-              </button>
-            ))}
+                </button>
+              );
+            })}
             {currentProjects.length === 0 && <p className="px-6 py-8 text-center" style={{ color: "#9ca3af", fontSize: "0.875rem" }}>No projects yet</p>}
           </div>
         </div>
