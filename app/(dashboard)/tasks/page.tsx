@@ -34,6 +34,7 @@ export default function TasksPage() {
     addTaskComment,
     updateTaskComment,
     deleteTaskComment,
+    currentTeam,
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState("");
