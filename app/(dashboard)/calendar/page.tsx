@@ -196,9 +196,9 @@ export default function CalendarPage() {
 }
 
 function CalendarDay({ day, events, isCurrentMonth, isToday: isTodayDay, onEventClick, onEventDrop }: { day: Date; events: CalendarEvent[]; isCurrentMonth: boolean; isToday: boolean; onEventClick: (event: CalendarEvent) => void; onEventDrop: (eventId: string, newDate: Date) => void; }) {
-  const [{ isOver }, drop] = useDrop({ accept: "event", drop: (item: { id: string }) => { onEventDrop(item.id, day); }, collect: (monitor) => ({ isOver: monitor.isOver() }) });
+  const [{ isOver }, drop] = useDrop(() => ({ accept: "event", drop: (item: { id: string }) => { onEventDrop(item.id, day); }, collect: (monitor) => ({ isOver: monitor.isOver() }) }), [day, onEventDrop]);
   return (
-    <div ref={drop} className="min-h-[100px] p-2 border-b border-r" style={{ borderColor: "#e5e7eb", background: isOver ? "#fef3c7" : isTodayDay ? "#fffbeb" : "transparent", opacity: isCurrentMonth ? 1 : 0.5 }}>
+    <div ref={drop as unknown as React.LegacyRef<HTMLDivElement>} className="min-h-[100px] p-2 border-b border-r" style={{ borderColor: "#e5e7eb", background: isOver ? "#fef3c7" : isTodayDay ? "#fffbeb" : "transparent", opacity: isCurrentMonth ? 1 : 0.5 }}>
       <div className={`text-sm mb-1 ${isTodayDay ? "font-semibold" : ""}`} style={{ color: isTodayDay ? "#f59e0b" : "#374151" }}>{format(day, "d")}</div>
       <div className="space-y-1">
         {events.slice(0, 3).map((event) => <DraggableEvent key={event.id} event={event} onClick={() => onEventClick(event)} />)}
@@ -209,6 +209,6 @@ function CalendarDay({ day, events, isCurrentMonth, isToday: isTodayDay, onEvent
 }
 
 function DraggableEvent({ event, onClick }: { event: CalendarEvent; onClick: () => void }) {
-  const [{ isDragging }, drag] = useDrag({ type: "event", item: { id: event.id }, collect: (monitor) => ({ isDragging: monitor.isDragging() }) });
-  return <div ref={drag} onClick={onClick} className="px-2 py-1 rounded text-xs truncate cursor-pointer" style={{ background: `${EVENT_COLORS[event.type]}20`, color: EVENT_COLORS[event.type], opacity: isDragging ? 0.5 : 1 }}>{event.title}</div>;
+  const [{ isDragging }, drag] = useDrag(() => ({ type: "event", item: { id: event.id }, collect: (monitor) => ({ isDragging: monitor.isDragging() }) }), [event.id]);
+  return <div ref={drag as unknown as React.LegacyRef<HTMLDivElement>} onClick={onClick} className="px-2 py-1 rounded text-xs truncate cursor-pointer" style={{ background: `${EVENT_COLORS[event.type]}20`, color: EVENT_COLORS[event.type], opacity: isDragging ? 0.5 : 1 }}>{event.title}</div>;
 }
