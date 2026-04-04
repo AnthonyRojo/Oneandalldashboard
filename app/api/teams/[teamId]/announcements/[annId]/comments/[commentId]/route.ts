@@ -109,7 +109,7 @@ export async function DELETE(
     if (fetchError) throw fetchError;
 
     const comments: AnnouncementComment[] = (existing.comments || []).filter(
-      (c) => c.id !== commentId
+      (c: AnnouncementComment) => c.id !== commentId
     );
 
     const { data: announcement, error } = await supabase
