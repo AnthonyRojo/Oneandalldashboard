@@ -36,7 +36,6 @@ export async function GET(
       status: p.status,
       color: p.color,
       progress: p.progress || 0,
-      dueDate: p.due_date,
       createdAt: p.created_at,
     }));
 
@@ -69,7 +68,6 @@ export async function POST(
         status: body.status || "active",
         color: body.color || "#3b82f6",
         progress: body.progress || 0,
-        due_date: body.dueDate || null,
         created_by: user.id,
       })
       .select()
@@ -85,7 +83,6 @@ export async function POST(
       status: project.status,
       color: project.color,
       progress: project.progress || 0,
-      dueDate: project.due_date,
       createdAt: project.created_at,
     };
 
