@@ -82,6 +82,11 @@ export default function TasksPage() {
   });
   const currentUserRole = currentMembers.find((m) => m.id === currentUser?.id)?.role?.toLowerCase();
   const canApprove = currentUserRole === "owner" || currentUserRole === "admin";
+  
+  // Debug approval check
+  if (typeof window !== "undefined") {
+    console.log("[v0] User role check - ID:", currentUser?.id, "Role:", currentUserRole, "canApprove:", canApprove);
+  }
 
   const filteredTasks = currentTasks.filter((task) => {
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -946,18 +951,46 @@ export default function TasksPage() {
                                 style={{ borderColor: "#e5e7eb" }}
                                 onKeyPress={(e) => {
                                   if (e.key === "Enter" && replyContent.trim()) {
-                                    addTaskComment(selectedTask.id, `@${comment.authorName} ${replyContent}`);
+                                    const replyText = `@${comment.authorName} ${replyContent}`;
+                                    // Optimistic update
+                                    const optimisticReply = {
+                                      id: `temp-${Date.now()}`,
+                                      content: replyText,
+                                      authorId: currentUser?.id || "",
+                                      authorName: currentUser?.email?.split("@")[0] || "You",
+                                      createdAt: new Date().toISOString(),
+                                    };
+                                    setSelectedTask({
+                                      ...selectedTask,
+                                      comments: [...(selectedTask.comments || []), optimisticReply]
+                                    });
                                     setReplyContent("");
                                     setReplyingToCommentId(null);
+                                    // Update backend
+                                    addTaskComment(selectedTask.id, replyText);
                                   }
                                 }}
                               />
                               <button 
                                 onClick={() => {
                                   if (replyContent.trim()) {
-                                    addTaskComment(selectedTask.id, `@${comment.authorName} ${replyContent}`);
+                                    const replyText = `@${comment.authorName} ${replyContent}`;
+                                    // Optimistic update
+                                    const optimisticReply = {
+                                      id: `temp-${Date.now()}`,
+                                      content: replyText,
+                                      authorId: currentUser?.id || "",
+                                      authorName: currentUser?.email?.split("@")[0] || "You",
+                                      createdAt: new Date().toISOString(),
+                                    };
+                                    setSelectedTask({
+                                      ...selectedTask,
+                                      comments: [...(selectedTask.comments || []), optimisticReply]
+                                    });
                                     setReplyContent("");
                                     setReplyingToCommentId(null);
+                                    // Update backend
+                                    addTaskComment(selectedTask.id, replyText);
                                   }
                                 }}
                                 className="px-3 py-1.5 rounded-lg text-white text-sm"

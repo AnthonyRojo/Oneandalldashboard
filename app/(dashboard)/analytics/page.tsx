@@ -47,6 +47,22 @@ export default function AnalyticsPage() {
       };
     }).sort((a, b) => b.totalTasks - a.totalTasks);
     
+    // Debug logging
+    if (typeof window !== "undefined") {
+      console.log("[v0] Member Stats Debug:");
+      console.log("[v0] All tasks:", currentTasks.map(t => ({ 
+        title: t.title, 
+        assigneeId: t.assigneeId, 
+        assigneeIds: t.assigneeIds,
+        status: t.status
+      })));
+      console.log("[v0] Member stats calculated:", stats.map(m => ({ 
+        name: m.name, 
+        totalTasks: m.totalTasks, 
+        completedTasks: m.completedTasks 
+      })));
+    }
+    
     return stats;
   }, [currentMembers, currentTasks, currentActivities]);
 
