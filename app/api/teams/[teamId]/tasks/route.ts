@@ -84,6 +84,20 @@ export async function POST(
     const body = await request.json();
     const supabase = getSupabaseAdmin();
 
+    // Validate assignee exists if provided
+    let assigneeId = body.assigneeId || body.assigneeIds?.[0] || null;
+    if (assigneeId) {
+      const { data: assignee } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", assigneeId)
+        .single();
+      
+      if (!assignee) {
+        assigneeId = null; // Set to null if assignee doesn't exist
+      }
+    }
+
     const { data: task, error } = await supabase
       .from("tasks")
       .insert({
@@ -93,7 +107,7 @@ export async function POST(
         description: body.description,
         status: body.status || "todo",
         priority: (body.priority || "medium").toLowerCase(),
-        assignee_id: body.assigneeId || body.assigneeIds?.[0] || null,
+        assignee_id: assigneeId,
         due_date: body.dueDate || null,
         tags: body.tags || [],
         created_by: user.id,
