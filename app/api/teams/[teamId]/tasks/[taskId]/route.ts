@@ -26,17 +26,17 @@ export async function PUT(
     if (updates.description !== undefined) updateData.description = updates.description;
     if (updates.status !== undefined) updateData.status = updates.status;
     if (updates.priority !== undefined) updateData.priority = updates.priority;
-    if (updates.assigneeId !== undefined) updateData.assignee_id = updates.assigneeId;
+    if (updates.assigneeId !== undefined) updateData.assignee_id = updates.assigneeId || null;
     if (updates.assigneeIds !== undefined) {
       updateData.assignee_ids = updates.assigneeIds.length > 0 ? updates.assigneeIds : null;
       updateData.assignee_id = updates.assigneeIds?.[0] || null;
     }
-    if (updates.dueDate !== undefined) updateData.due_date = updates.dueDate;
-    if (updates.projectId !== undefined) updateData.project_id = updates.projectId;
+    if (updates.dueDate !== undefined) updateData.due_date = updates.dueDate || null;
+    if (updates.projectId !== undefined) updateData.project_id = updates.projectId || null;
     if (updates.tags !== undefined) updateData.tags = updates.tags;
-    if (updates.submittedLink !== undefined) updateData.submitted_link = updates.submittedLink;
+    if (updates.submittedLink !== undefined) updateData.submitted_link = updates.submittedLink || null;
     if (updates.submissionStatus !== undefined) updateData.submission_status = updates.submissionStatus;
-    if (updates.approverId !== undefined) updateData.approver_id = updates.approverId;
+    if (updates.approverId !== undefined) updateData.approver_id = updates.approverId || null;
 
     const { data: task, error } = await supabase
       .from("tasks")
