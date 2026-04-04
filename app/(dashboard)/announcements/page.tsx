@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { useApp, AnnouncementType, Announcement, PollOption, AnnouncementComment } from "@/context/AppContext";
-import { Plus, X, Megaphone, RefreshCw, HelpCircle, BarChart, Pin, Trash2, Heart, MessageSquare, Send, Pencil, Filter, ChevronDown, Search } from "lucide-react";
+import { Plus, X, Megaphone, AlertCircle, HelpCircle, BarChart, Pin, Trash2, Heart, MessageSquare, Send, Pencil, Filter, ChevronDown, Search } from "lucide-react";
 
 const TYPE_CONFIG: Record<AnnouncementType, { label: string; icon: typeof Megaphone; color: string }> = {
-  update: { label: "Update", icon: RefreshCw, color: "#22c55e" },
+  info: { label: "Info", icon: HelpCircle, color: "#3b82f6" },
+  alert: { label: "Alert", icon: AlertCircle, color: "#ef4444" },
   poll: { label: "Poll", icon: BarChart, color: "#8b5cf6" },
-  question: { label: "Question", icon: HelpCircle, color: "#3b82f6" },
+  milestone: { label: "Milestone", icon: Megaphone, color: "#22c55e" },
 };
 
 export default function AnnouncementsPage() {
@@ -210,7 +211,7 @@ export default function AnnouncementsPage() {
                     <span className="text-xs" style={{ color: "#9ca3af" }}>{new Date(announcement.createdAt).toLocaleDateString()}</span>
                     {announcement.editedAt && <span className="text-xs" style={{ color: "#9ca3af" }}>(edited)</span>}
                   </div>
-                  <p className="mb-4 whitespace-pre-wrap" style={{ color: "#374151" }}>{announcement.content}</p>
+                  <p className="mb-4 line-clamp-none break-words whitespace-pre-wrap" style={{ color: "#374151" }}>{announcement.content}</p>
 
                   {/* Poll Options */}
                   {announcement.type === "poll" && announcement.pollOptions && (

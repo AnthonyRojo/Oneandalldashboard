@@ -45,6 +45,9 @@ export default function TasksPage() {
   const [newComment, setNewComment] = useState("");
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentContent, setEditingCommentContent] = useState("");
+  const [replyingToCommentId, setReplyingToCommentId] = useState<string | null>(null);
+  const [replyContent, setReplyContent] = useState("");
+  const [resolvedComments, setResolvedComments] = useState<Set<string>>(new Set());
   const [newTask, setNewTask] = useState({
     title: "",
     description: "",
@@ -74,7 +77,7 @@ export default function TasksPage() {
     submittedLink: "",
     approverId: "",
   });
-  const [editTag, setEditTag] = useState("");
+  const [approvalFeedback, setApprovalFeedback] = useState<{ taskId: string; approved: boolean } | null>(null);
 
   const filteredTasks = currentTasks.filter((task) => {
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -192,6 +195,8 @@ export default function TasksPage() {
       submissionStatus: approved ? "approved" : "rejected",
       status: approved ? "completed" : "in-progress"
     });
+    setApprovalFeedback({ taskId, approved });
+    setTimeout(() => setApprovalFeedback(null), 2000);
   };
 
   return (
@@ -671,7 +676,7 @@ export default function TasksPage() {
             </div>
             <div className="p-6 overflow-y-auto flex-1">
               {selectedTask.description && (
-                <p className="mb-4" style={{ color: "#6b7280" }}>{selectedTask.description}</p>
+                <p className="mb-4 break-words whitespace-pre-wrap" style={{ color: "#6b7280" }}>{selectedTask.description}</p>
               )}
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <div>
@@ -730,21 +735,30 @@ export default function TasksPage() {
                       )}
                     </div>
                     {selectedTask.submissionStatus === "pending" && (
-                      <div className="flex gap-2 mt-2">
+                      <div className="flex gap-3 mt-4">
                         <button 
                           onClick={() => handleApproveSubmission(selectedTask.id, true)}
-                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm text-white"
+                          className="flex items-center gap-2 flex-1 px-4 py-3 rounded-lg text-sm font-medium text-white transition-all hover:shadow-md"
                           style={{ background: "#22c55e" }}
                         >
-                          <Check className="w-4 h-4" /> Approve
+                          <Check className="w-5 h-5" /> Approve
                         </button>
                         <button 
                           onClick={() => handleApproveSubmission(selectedTask.id, false)}
-                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm text-white"
+                          className="flex items-center gap-2 flex-1 px-4 py-3 rounded-lg text-sm font-medium text-white transition-all hover:shadow-md"
                           style={{ background: "#ef4444" }}
                         >
-                          <XCircle className="w-4 h-4" /> Reject
+                          <XCircle className="w-5 h-5" /> Reject
                         </button>
+                      </div>
+                    )}
+                    {approvalFeedback?.taskId === selectedTask.id && (
+                      <div className="flex items-center gap-2 mt-3 px-4 py-2 rounded-lg text-sm font-medium" style={{ 
+                        background: approvalFeedback.approved ? "#dcfce7" : "#fee2e2",
+                        color: approvalFeedback.approved ? "#16a34a" : "#dc2626"
+                      }}>
+                        <Check className="w-4 h-4" />
+                        {approvalFeedback.approved ? "Approved successfully!" : "Rejected successfully!"}
                       </div>
                     )}
                   </div>
@@ -789,7 +803,7 @@ export default function TasksPage() {
                 <h3 className="font-medium mb-4" style={{ color: "#111827" }}>Comments</h3>
                 <div className="space-y-3 mb-4">
                   {selectedTask.comments?.map((comment) => (
-                    <div key={comment.id} className="p-3 rounded-lg" style={{ background: "#f9fafb" }}>
+                    <div key={comment.id} className="p-3 rounded-lg" style={{ background: resolvedComments.has(comment.id) ? "#f0fdf4" : "#f9fafb" }}>
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-sm" style={{ color: "#111827" }}>
@@ -798,9 +812,25 @@ export default function TasksPage() {
                           <span className="text-xs" style={{ color: "#9ca3af" }}>
                             {new Date(comment.createdAt).toLocaleDateString()}
                           </span>
+                          {resolvedComments.has(comment.id) && (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: "#dcfce7", color: "#16a34a" }}>
+                              ✓ Resolved
+                            </span>
+                          )}
                         </div>
                         {comment.authorId === currentUser?.id && (
                           <div className="flex items-center gap-1">
+                            <button 
+                              onClick={() => setResolvedComments(prev => {
+                                const next = new Set(prev);
+                                next.has(comment.id) ? next.delete(comment.id) : next.add(comment.id);
+                                return next;
+                              })}
+                              className="p-1 rounded hover:bg-green-100"
+                              title={resolvedComments.has(comment.id) ? "Mark as unresolved" : "Mark as resolved"}
+                            >
+                              <Check className="w-3 h-3" style={{ color: resolvedComments.has(comment.id) ? "#16a34a" : "#9ca3af" }} />
+                            </button>
                             <button 
                               onClick={() => {
                                 setEditingCommentId(comment.id);
@@ -844,7 +874,48 @@ export default function TasksPage() {
                           </button>
                         </div>
                       ) : (
-                        <p className="text-sm" style={{ color: "#6b7280" }}>{comment.content}</p>
+                        <>
+                          <p className="text-sm mb-2" style={{ color: "#6b7280" }}>{comment.content}</p>
+                          <button 
+                            onClick={() => setReplyingToCommentId(replyingToCommentId === comment.id ? null : comment.id)}
+                            className="text-xs font-medium transition-colors"
+                            style={{ color: "#3b82f6" }}
+                          >
+                            {replyingToCommentId === comment.id ? "Cancel Reply" : "Reply"}
+                          </button>
+                          {replyingToCommentId === comment.id && (
+                            <div className="flex gap-2 mt-2">
+                              <input
+                                type="text"
+                                value={replyContent}
+                                onChange={(e) => setReplyContent(e.target.value)}
+                                placeholder="Write a reply..."
+                                className="flex-1 px-3 py-1.5 rounded-lg border text-sm"
+                                style={{ borderColor: "#e5e7eb" }}
+                                onKeyPress={(e) => {
+                                  if (e.key === "Enter" && replyContent.trim()) {
+                                    addTaskComment(selectedTask.id, `@${comment.authorName} ${replyContent}`);
+                                    setReplyContent("");
+                                    setReplyingToCommentId(null);
+                                  }
+                                }}
+                              />
+                              <button 
+                                onClick={() => {
+                                  if (replyContent.trim()) {
+                                    addTaskComment(selectedTask.id, `@${comment.authorName} ${replyContent}`);
+                                    setReplyContent("");
+                                    setReplyingToCommentId(null);
+                                  }
+                                }}
+                                className="px-3 py-1.5 rounded-lg text-white text-sm"
+                                style={{ background: "#3b82f6" }}
+                              >
+                                <Send className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   ))}
