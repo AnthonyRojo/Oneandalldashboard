@@ -73,13 +73,18 @@ export default function CalendarPage() {
   };
 
   const handleCreateEvent = async () => {
-    if (!newEvent.title.trim() || !newEvent.date) return;
+    if (!newEvent.title || !newEvent.date || !newEvent.startTime) return;
+    
+    // Combine date with time to create full ISO timestamps
+    const dateStr = newEvent.date;
+    const startDateTime = `${dateStr}T${newEvent.startTime}:00`;
+    const endDateTime = `${dateStr}T${newEvent.endTime}:00`;
+    
     await addEvent({
       title: newEvent.title,
       description: newEvent.description,
-      date: newEvent.date,
-      startTime: newEvent.startTime,
-      endTime: newEvent.endTime,
+      startTime: startDateTime,
+      endTime: endDateTime,
       type: newEvent.type,
       link: newEvent.link || undefined,
     });
