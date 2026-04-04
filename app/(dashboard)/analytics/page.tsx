@@ -132,7 +132,7 @@ export default function AnalyticsPage() {
                   </div>
                   <div className="flex flex-wrap gap-1">
                     {currentTasks
-                      .filter((t) => (t.assigneeId === member.id || t.assigneeId === member.Id || t.assigneeIds?.includes(member.id) || t.assigneeIds?.includes(member.Id)))
+                      .filter((t) => (t.assigneeId === member.id || t.assigneeId === member.id || t.assigneeIds?.includes(member.id) || t.assigneeIds?.includes(member.id)))
                       .slice(0, 3)
                       .map((task) => (
                         <span key={task.id} className="px-2 py-1 rounded-full text-xs" style={{ background: "#f3f4f6", color: "#374151" }}>
