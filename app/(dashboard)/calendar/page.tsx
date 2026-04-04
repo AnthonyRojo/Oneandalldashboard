@@ -74,18 +74,33 @@ export default function CalendarPage() {
     return currentEvents.filter((event) => event.date === dateStr);
   };
 
-  const handleMoveEvent = useCallback(async (eventId: string, newDate: Date) => {
-    const event = currentEvents.find((e) => e.id === eventId);
-    if (!event) return;
-    const newDateStr = format(newDate, "yyyy-MM-dd");
-    const startDateTime = `${newDateStr}T${event.startTime.split("T")[1]}`;
-    const endDateTime = `${newDateStr}T${event.endTime.split("T")[1]}`;
-    await updateEvent(eventId, { startTime: startDateTime, endTime: endDateTime });
-  }, [currentEvents, updateEvent]);
-
-  const handleDateClick = (date: Date) => {
-    setNewEvent({ ...newEvent, date: format(date, "yyyy-MM-dd") });
-    setShowCreateModal(true);
+  const handleCreateEvent = async () => {
+    if (!newEvent.title || !newEvent.date || !newEvent.startTime) return;
+    
+    // Ensure date is in YYYY-MM-DD format
+    let dateStr = newEvent.date;
+    if (newEvent.date instanceof Date) {
+      dateStr = format(newEvent.date, "yyyy-MM-dd");
+    } else if (typeof newEvent.date === "object") {
+      dateStr = format(new Date(newEvent.date as any), "yyyy-MM-dd");
+    }
+    
+    // Combine date with time to create full ISO timestamps
+    const startDateTime = `${dateStr}T${newEvent.startTime}:00`;
+    const endDateTime = `${dateStr}T${newEvent.endTime}:00`;
+    
+    await addEvent({
+      title: newEvent.title,
+      description: newEvent.description,
+      date: dateStr,             // <--- HERE IS THE FIX
+      startTime: startDateTime,
+      endTime: endDateTime,
+      type: newEvent.type,
+      link: newEvent.link || undefined,
+    });
+    
+    setShowCreateModal(false);
+    setNewEvent({ title: "", description: "", type: "Meeting", date: "", startTime: "09:00", endTime: "10:00", link: "" });
   };
 
   const handleCreateEvent = async () => {
