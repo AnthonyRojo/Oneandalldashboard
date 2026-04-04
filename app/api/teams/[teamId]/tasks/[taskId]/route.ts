@@ -31,6 +31,9 @@ export async function PUT(
     if (updates.dueDate !== undefined) updateData.due_date = updates.dueDate;
     if (updates.projectId !== undefined) updateData.project_id = updates.projectId;
     if (updates.tags !== undefined) updateData.tags = updates.tags;
+    if (updates.submittedLink !== undefined) updateData.submitted_link = updates.submittedLink;
+    if (updates.submissionStatus !== undefined) updateData.submission_status = updates.submissionStatus;
+    if (updates.approverId !== undefined) updateData.approver_id = updates.approverId;
 
     const { data: task, error } = await supabase
       .from("tasks")
@@ -54,8 +57,11 @@ export async function PUT(
       assigneeIds: task.assignee_id ? [task.assignee_id] : [],
       dueDate: task.due_date,
       tags: task.tags || [],
+      submittedLink: task.submitted_link,
+      submissionStatus: task.submission_status,
+      approverId: task.approver_id,
       createdAt: task.created_at,
-      comments: [],
+      comments: task.comments || [],
     };
 
     if (updates.status === "completed") {
