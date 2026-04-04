@@ -77,7 +77,8 @@ export default function TasksPage() {
     submittedLink: "",
     approverId: "",
   });
-  const [approvalFeedback, setApprovalFeedback] = useState<{ taskId: string; approved: boolean } | null>(null);
+  const currentUserRole = currentMembers.find((m) => m.id === currentUser?.id)?.role;
+  const canApprove = currentUserRole === "Owner" || currentUserRole === "Admin";
 
   const filteredTasks = currentTasks.filter((task) => {
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -761,7 +762,7 @@ export default function TasksPage() {
                         </span>
                       )}
                     </div>
-                    {selectedTask.submissionStatus === "pending" && (
+                    {selectedTask.submissionStatus === "pending" && canApprove && (
                       <div className="flex gap-3 mt-4">
                         <button 
                           onClick={() => handleApproveSubmission(selectedTask.id, true)}
@@ -777,6 +778,11 @@ export default function TasksPage() {
                         >
                           <XCircle className="w-5 h-5" /> Reject
                         </button>
+                      </div>
+                    )}
+                    {selectedTask.submissionStatus === "pending" && !canApprove && (
+                      <div className="mt-4 p-3 rounded-lg text-sm" style={{ background: "#f3f4f6", color: "#6b7280" }}>
+                        Only team admins and owners can approve submissions.
                       </div>
                     )}
                     {approvalFeedback?.taskId === selectedTask.id && (
