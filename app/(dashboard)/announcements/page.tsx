@@ -5,7 +5,7 @@ import { useApp, AnnouncementType, Announcement, PollOption, AnnouncementComment
 import { Plus, X, Megaphone, AlertCircle, HelpCircle, BarChart, Pin, Trash2, Heart, MessageSquare, Send, Pencil, Filter, ChevronDown, Search } from "lucide-react";
 
 const TYPE_CONFIG: Record<AnnouncementType, { label: string; icon: typeof Megaphone; color: string }> = {
-  info: { label: "Info", icon: HelpCircle, color: "#3b82f6" },
+  info: { label: "Update", icon: HelpCircle, color: "#3b82f6" },
   alert: { label: "Alert", icon: AlertCircle, color: "#ef4444" },
   poll: { label: "Poll", icon: BarChart, color: "#8b5cf6" },
   milestone: { label: "Milestone", icon: Megaphone, color: "#22c55e" },
