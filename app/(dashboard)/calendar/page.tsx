@@ -92,40 +92,13 @@ export default function CalendarPage() {
     await addEvent({
       title: newEvent.title,
       description: newEvent.description,
-      date: dateStr,             // <--- HERE IS THE FIX
+      date: dateStr,
       startTime: startDateTime,
       endTime: endDateTime,
       type: newEvent.type,
       link: newEvent.link || undefined,
     });
     
-    setShowCreateModal(false);
-    setNewEvent({ title: "", description: "", type: "Meeting", date: "", startTime: "09:00", endTime: "10:00", link: "" });
-  };
-
-  const handleCreateEvent = async () => {
-    if (!newEvent.title || !newEvent.date || !newEvent.startTime) return;
-    
-    // Ensure date is in YYYY-MM-DD format
-    let dateStr = newEvent.date;
-    if (newEvent.date instanceof Date) {
-      dateStr = format(newEvent.date, "yyyy-MM-dd");
-    } else if (typeof newEvent.date === "object") {
-      dateStr = format(new Date(newEvent.date as any), "yyyy-MM-dd");
-    }
-    
-    // Combine date with time to create full ISO timestamps
-    const startDateTime = `${dateStr}T${newEvent.startTime}:00`;
-    const endDateTime = `${dateStr}T${newEvent.endTime}:00`;
-    
-    await addEvent({
-      title: newEvent.title,
-      description: newEvent.description,
-      startTime: startDateTime,
-      endTime: endDateTime,
-      type: newEvent.type,
-      link: newEvent.link || undefined,
-    });
     setShowCreateModal(false);
     setNewEvent({ title: "", description: "", type: "Meeting", date: "", startTime: "09:00", endTime: "10:00", link: "" });
   };
@@ -158,14 +131,49 @@ export default function CalendarPage() {
     setSelectedEvent(null);
   };
 
+  const handleMoveEvent = async (eventId: string, newDate: Date) => {
+    const dateStr = format(newDate, "yyyy-MM-dd");
+    const event = currentEvents.find(e => e.id === eventId);
+    if (!event) return;
+
+    try {
+      // Extract just the time part if it's an ISO string
+      const oldStartTime = event.startTime.includes('T') ? event.startTime.split('T')[1] : "09:00:00";
+      const oldEndTime = event.endTime.includes('T') ? event.endTime.split('T')[1] : "10:00:00";
+
+      await updateEvent(eventId, {
+        date: dateStr,
+        startTime: `${dateStr}T${oldStartTime}`,
+        endTime: `${dateStr}T${oldEndTime}`
+      });
+    } catch (error) {
+      console.error("Failed to move event:", error);
+    }
+  };
+
+  const handleDateClick = (date: Date) => {
+    setNewEvent(prev => ({
+      ...prev,
+      date: format(date, "yyyy-MM-dd")
+    }));
+    setShowCreateModal(true);
+  };
+
   const formatTime = (time: string) => {
-    const [h, m] = time.split(":");
-    const hour = parseInt(h);
-    const ampm = hour >= 12 ? "PM" : "AM";
-    return `${hour % 12 || 12}:${m} ${ampm}`;
+    if (!time) return "";
+    try {
+      const timeStr = time.includes('T') ? time.split('T')[1].substring(0, 5) : time;
+      const [h, m] = timeStr.split(":");
+      const hour = parseInt(h);
+      const ampm = hour >= 12 ? "PM" : "AM";
+      return `${hour % 12 || 12}:${m} ${ampm}`;
+    } catch (e) {
+      return time;
+    }
   };
 
   const formatEventDate = (dateStr: string) => {
+    if (!dateStr) return "";
     const d = new Date(dateStr + "T12:00:00");
     const today = new Date();
     const tomorrow = new Date(today);
@@ -390,7 +398,7 @@ export default function CalendarPage() {
             </div>
             <div className="p-6 border-t flex justify-end gap-3" style={{ borderColor: "#e5e7eb" }}>
               <button onClick={() => setSelectedEvent(null)} className="px-4 py-2 rounded-xl" style={{ background: "#f3f4f6" }}>Close</button>
-              <button onClick={() => { setEditingEvent(selectedEvent); setEditForm({ title: selectedEvent.title, description: selectedEvent.description, type: selectedEvent.type, date: selectedEvent.date, startTime: selectedEvent.startTime.split("T")[1], endTime: selectedEvent.endTime.split("T")[1], link: "" }); setSelectedEvent(null); }} className="px-4 py-2 rounded-xl text-white flex items-center gap-2" style={{ background: "#3b82f6" }}>
+              <button onClick={() => { setEditingEvent(selectedEvent); setEditForm({ title: selectedEvent.title, description: selectedEvent.description, type: selectedEvent.type, date: selectedEvent.date, startTime: selectedEvent.startTime.includes("T") ? selectedEvent.startTime.split("T")[1].substring(0,5) : selectedEvent.startTime, endTime: selectedEvent.endTime.includes("T") ? selectedEvent.endTime.split("T")[1].substring(0,5) : selectedEvent.endTime, link: selectedEvent.link || "" }); setSelectedEvent(null); }} className="px-4 py-2 rounded-xl text-white flex items-center gap-2" style={{ background: "#3b82f6" }}>
                 <Pencil className="w-4 h-4" /> Edit
               </button>
               <button onClick={() => { deleteEvent(selectedEvent.id); setSelectedEvent(null); }} className="px-4 py-2 rounded-xl text-white flex items-center gap-2" style={{ background: "#ef4444" }}>
