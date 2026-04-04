@@ -8,7 +8,6 @@ const TYPE_CONFIG: Record<AnnouncementType, { label: string; icon: typeof Megaph
   update: { label: "Update", icon: HelpCircle, color: "#3b82f6" },
   question: { label: "Question", icon: AlertCircle, color: "#ef4444" },
   poll: { label: "Poll", icon: BarChart, color: "#8b5cf6" },
-  milestone: { label: "Milestone", icon: Megaphone, color: "#22c55e" },
 };
 
 export default function AnnouncementsPage() {
