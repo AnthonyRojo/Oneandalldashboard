@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, memo } from "react";
 import { useApp, CalendarEvent, EventType } from "@/context/AppContext";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
@@ -82,6 +82,11 @@ export default function CalendarPage() {
     const endDateTime = `${newDateStr}T${event.endTime.split("T")[1]}`;
     await updateEvent(eventId, { startTime: startDateTime, endTime: endDateTime });
   }, [currentEvents, updateEvent]);
+
+  const handleDateClick = (date: Date) => {
+    setNewEvent({ ...newEvent, date: format(date, "yyyy-MM-dd") });
+    setShowCreateModal(true);
+  };
 
   const handleCreateEvent = async () => {
     if (!newEvent.title || !newEvent.date || !newEvent.startTime) return;
@@ -271,7 +276,7 @@ export default function CalendarPage() {
           </div>
           <div className="grid grid-cols-7">
             {calendarDays.map((day, i) => (
-              <CalendarDay key={i} day={day} events={getEventsForDay(day)} isCurrentMonth={isSameMonth(day, currentMonth)} isToday={isToday(day)} onEventClick={setSelectedEvent} onEventDrop={handleMoveEvent} />
+              <CalendarDay key={i} day={day} events={getEventsForDay(day)} isCurrentMonth={isSameMonth(day, currentMonth)} isToday={isToday(day)} onEventClick={setSelectedEvent} onEventDrop={handleMoveEvent} onDateClick={handleDateClick} />
             ))}
           </div>
         </div>
@@ -370,9 +375,76 @@ export default function CalendarPage() {
             </div>
             <div className="p-6 border-t flex justify-end gap-3" style={{ borderColor: "#e5e7eb" }}>
               <button onClick={() => setSelectedEvent(null)} className="px-4 py-2 rounded-xl" style={{ background: "#f3f4f6" }}>Close</button>
+              <button onClick={() => { setEditingEvent(selectedEvent); setEditForm({ title: selectedEvent.title, description: selectedEvent.description, type: selectedEvent.type, date: selectedEvent.date, startTime: selectedEvent.startTime.split("T")[1], endTime: selectedEvent.endTime.split("T")[1], link: "" }); setSelectedEvent(null); }} className="px-4 py-2 rounded-xl text-white flex items-center gap-2" style={{ background: "#3b82f6" }}>
+                <Pencil className="w-4 h-4" /> Edit
+              </button>
               <button onClick={() => { deleteEvent(selectedEvent.id); setSelectedEvent(null); }} className="px-4 py-2 rounded-xl text-white flex items-center gap-2" style={{ background: "#ef4444" }}>
                 <Trash2 className="w-4 h-4" /> Delete
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Event Modal */}
+      {editingEvent && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b flex items-center justify-between" style={{ borderColor: "#e5e7eb" }}>
+              <h2 className="text-lg font-semibold" style={{ color: "#111827" }}>Edit Event</h2>
+              <button onClick={() => setEditingEvent(null)} className="p-1 rounded-lg hover:bg-gray-100"><X className="w-5 h-5" style={{ color: "#6b7280" }} /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Title</label>
+                <input type="text" value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} className="w-full px-4 py-2 rounded-xl border" style={{ borderColor: "#e5e7eb" }} placeholder="Event title" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Type</label>
+                <select value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value as EventType })} className="w-full px-4 py-2 rounded-xl border" style={{ borderColor: "#e5e7eb" }}>
+                  <option value="Meeting">Meeting</option>
+                  <option value="Review">Review</option>
+                  <option value="Post">Post</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div>
+                <DatePicker 
+                  label="Date" 
+                  value={editForm.date ? new Date(editForm.date) : undefined} 
+                  onChange={(val) => {
+                    const dateStr = val instanceof Date ? format(val, "yyyy-MM-dd") : (typeof val === "string" ? val : "");
+                    setEditForm({ ...editForm, date: dateStr });
+                  }} 
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Start Time</label>
+                  <input type="time" value={editForm.startTime} onChange={(e) => setEditForm({ ...editForm, startTime: e.target.value })} className="w-full px-4 py-2 rounded-xl border" style={{ borderColor: "#e5e7eb" }} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>End Time</label>
+                  <input type="time" value={editForm.endTime} onChange={(e) => setEditForm({ ...editForm, endTime: e.target.value })} className="w-full px-4 py-2 rounded-xl border" style={{ borderColor: "#e5e7eb" }} />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Link (optional)</label>
+                <input type="url" value={editForm.link} onChange={(e) => setEditForm({ ...editForm, link: e.target.value })} className="w-full px-4 py-2 rounded-xl border" style={{ borderColor: "#e5e7eb" }} placeholder="https://meet.google.com/..." />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Description</label>
+                <textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} className="w-full px-4 py-2 rounded-xl border resize-none" style={{ borderColor: "#e5e7eb" }} rows={3} placeholder="Event description" />
+              </div>
+            </div>
+            <div className="p-6 border-t flex justify-end gap-3" style={{ borderColor: "#e5e7eb" }}>
+              <button onClick={() => setEditingEvent(null)} className="px-4 py-2 rounded-xl" style={{ background: "#f3f4f6" }}>Cancel</button>
+              <button onClick={async () => {
+                const startDateTime = `${editForm.date}T${editForm.startTime}:00`;
+                const endDateTime = `${editForm.date}T${editForm.endTime}:00`;
+                await updateEvent(editingEvent.id, { title: editForm.title, description: editForm.description, type: editForm.type, startTime: startDateTime, endTime: endDateTime, link: editForm.link });
+                setEditingEvent(null);
+              }} className="px-4 py-2 rounded-xl text-white" style={{ background: "#3b82f6" }}>Save Changes</button>
             </div>
           </div>
         </div>
@@ -382,13 +454,13 @@ export default function CalendarPage() {
   );
 }
 
-function CalendarDay({ day, events, isCurrentMonth, isToday: isTodayDay, onEventClick, onEventDrop }: { day: Date; events: CalendarEvent[]; isCurrentMonth: boolean; isToday: boolean; onEventClick: (event: CalendarEvent) => void; onEventDrop: (eventId: string, newDate: Date) => void; }) {
+function CalendarDay({ day, events, isCurrentMonth, isToday: isTodayDay, onEventClick, onEventDrop, onDateClick }: { day: Date; events: CalendarEvent[]; isCurrentMonth: boolean; isToday: boolean; onEventClick: (event: CalendarEvent) => void; onEventDrop: (eventId: string, newDate: Date) => void; onDateClick: (date: Date) => void; }) {
   const [{ isOver }, drop] = useDrop(() => ({ accept: "event", drop: (item: { id: string }) => { onEventDrop(item.id, day); }, collect: (monitor) => ({ isOver: monitor.isOver() }) }), [day, onEventDrop]);
   return (
-    <div ref={drop as unknown as React.LegacyRef<HTMLDivElement>} className="min-h-[100px] p-2 border-b border-r transition-colors" style={{ borderColor: "#e5e7eb", background: isOver ? "#fef3c7" : isTodayDay ? "#fffbeb" : "transparent", opacity: isCurrentMonth ? 1 : 0.5 }}>
+    <div ref={drop as unknown as React.LegacyRef<HTMLDivElement>} onClick={() => onDateClick(day)} className="min-h-[100px] p-2 border-b border-r transition-colors cursor-pointer hover:bg-blue-50" style={{ borderColor: "#e5e7eb", background: isOver ? "#fef3c7" : isTodayDay ? "#fffbeb" : "transparent", opacity: isCurrentMonth ? 1 : 0.5 }}>
       <div className={`text-sm mb-1 ${isTodayDay ? "font-semibold" : ""}`} style={{ color: isTodayDay ? "#f59e0b" : "#374151" }}>{format(day, "d")}</div>
       <div className="space-y-1">
-        {events.slice(0, 3).map((event) => <DraggableEvent key={event.id} event={event} onClick={() => onEventClick(event)} />)}
+        {events.slice(0, 3).map((event) => <MemoizedDraggableEvent key={event.id} event={event} onClick={(e) => { e.stopPropagation(); onEventClick(event); }} />)}
         {events.length > 3 && <div className="text-xs" style={{ color: "#6b7280" }}>+{events.length - 3} more</div>}
       </div>
     </div>
@@ -399,3 +471,5 @@ function DraggableEvent({ event, onClick }: { event: CalendarEvent; onClick: () 
   const [{ isDragging }, drag] = useDrag(() => ({ type: "event", item: { id: event.id }, collect: (monitor) => ({ isDragging: monitor.isDragging() }) }), [event.id]);
   return <button ref={drag as unknown as React.LegacyRef<HTMLButtonElement>} onClick={onClick} className="w-full text-left px-2 py-1 rounded text-xs truncate cursor-move transition-all border-l-4" style={{ background: `${EVENT_COLORS[event.type]}15`, color: EVENT_COLORS[event.type], borderColor: EVENT_COLORS[event.type], opacity: isDragging ? 0.5 : 1, borderRadius: "0.375rem" }}>{event.title}</button>;
 }
+
+const MemoizedDraggableEvent = memo(DraggableEvent);
