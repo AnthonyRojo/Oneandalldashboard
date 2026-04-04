@@ -108,7 +108,12 @@ export default function AnalyticsPage() {
               {recentActivities.map((activity) => (
                 <div key={activity.id} className="flex items-start gap-3">
                   <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "#f59e0b20" }}><Activity className="w-4 h-4" style={{ color: "#f59e0b" }} /></div>
-                  <div className="flex-1 min-w-0"><p className="text-sm" style={{ color: "#374151" }}>{activity.description}</p><p className="text-xs" style={{ color: "#9ca3af" }}>{new Date(activity.createdAt).toLocaleString()}</p></div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm" style={{ color: "#374151" }}>
+                      {activity.userName} {activity.action} {activity.target}
+                    </p>
+                    <p className="text-xs" style={{ color: "#9ca3af" }}>{new Date(activity.createdAt).toLocaleString()}</p>
+                  </div>
                 </div>
               ))}
             </div>
