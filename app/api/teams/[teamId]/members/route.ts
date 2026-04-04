@@ -24,13 +24,13 @@ export async function GET(
 
     const { data: members, error } = await supabase
       .from("team_members")
-      .select("id, team_id, user_id, role, joined_at, status")
+      .select("id, team_id, user_id, name, email, avatar, role, status, joined_at")
       .eq("team_id", teamId);
 
     if (error) throw error;
 
-    // Get profile info separately
-    const userIds = (members || []).map((m) => m.user_id);
+    // Get profile info separately for members with user_id (linked to auth)
+    const userIds = (members || []).filter((m) => m.user_id).map((m) => m.user_id);
     let profilesMap: Record<string, { name: string; email: string; avatar_url: string }> = {};
     
     if (userIds.length > 0) {
@@ -47,14 +47,16 @@ export async function GET(
 
     // Transform to expected format
     const formatted = (members || []).map((m: Record<string, unknown>) => {
-      const profile = profilesMap[m.user_id as string];
+      const profile = m.user_id ? profilesMap[m.user_id as string] : null;
+      // Use team_members table data first, fall back to profile data
       return {
-        id: m.user_id,
+        id: m.id,
         odid: m.id,
         teamId: m.team_id,
-        name: profile?.name || "Unknown",
-        email: profile?.email || "",
-        avatar: profile?.avatar_url || getInitials((profile?.name as string) || "U"),
+        userId: m.user_id,
+        name: (m.name as string) || profile?.name || "Unknown",
+        email: (m.email as string) || profile?.email || "",
+        avatar: (m.avatar as string) || profile?.avatar_url || getInitials(((m.name as string) || profile?.name || "U")),
         role: m.role === "owner" ? "Owner" : m.role === "admin" ? "Admin" : "Member",
         status: m.status || "Available",
       };
@@ -108,12 +110,26 @@ export async function POST(
       return badRequest("User is already a team member");
     }
 
-    // Add as member
+    // Get profile info first
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", foundUser.id)
+      .single();
+
+    const memberName = profile?.name || foundUser.email?.split("@")[0] || "User";
+    const memberEmail = foundUser.email || "";
+    const memberAvatar = profile?.avatar_url || getInitials(memberName);
+
+    // Add as member with profile info
     const { data: membership, error } = await supabase
       .from("team_members")
       .insert({
         team_id: teamId,
         user_id: foundUser.id,
+        name: memberName,
+        email: memberEmail,
+        avatar: memberAvatar,
         role: role?.toLowerCase() || "member",
       })
       .select()
@@ -121,19 +137,14 @@ export async function POST(
 
     if (error) throw error;
 
-    const profile = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", foundUser.id)
-      .single();
-
     const member = {
-      id: foundUser.id,
+      id: membership.id,
       odid: membership.id,
       teamId,
-      name: profile.data?.name || foundUser.email?.split("@")[0] || "User",
-      email: foundUser.email,
-      avatar: profile.data?.avatar_url || getInitials(profile.data?.name || "U"),
+      userId: foundUser.id,
+      name: memberName,
+      email: memberEmail,
+      avatar: memberAvatar,
       role: role || "Member",
       status: "Available",
     };

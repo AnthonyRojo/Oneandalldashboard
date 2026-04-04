@@ -66,10 +66,20 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error;
 
-    // Add creator as owner
+    // Get creator's profile info
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("name, email, avatar_url")
+      .eq("id", user.id)
+      .single();
+
+    // Add creator as owner with profile info
     await supabase.from("team_members").insert({
       team_id: team.id,
       user_id: user.id,
+      name: profile?.name || user.email?.split("@")[0] || "User",
+      email: profile?.email || user.email,
+      avatar: profile?.avatar_url,
       role: "owner",
     });
 

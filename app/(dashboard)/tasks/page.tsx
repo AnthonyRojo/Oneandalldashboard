@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useApp, Task, TaskPriority, TaskStatus } from "@/context/AppContext";
+import { useApp, Task, TaskPriority, TaskStatus, TaskComment } from "@/context/AppContext";
 import {
   Plus, Search, Filter, CheckCircle, Clock, AlertCircle, MessageSquare,
-  X, ChevronDown, Tag, Pencil, Trash2,
-  Users, Calendar
+  X, ChevronDown, Tag, Pencil, Trash2, Users, Calendar, Link2, UserCheck,
+  Send, ExternalLink, Check, XCircle
 } from "lucide-react";
 import DatePicker from "@/components/ui/DatePicker";
 
@@ -32,6 +32,8 @@ export default function TasksPage() {
     updateTask,
     deleteTask,
     addTaskComment,
+    updateTaskComment,
+    deleteTaskComment,
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -39,7 +41,10 @@ export default function TasksPage() {
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | "all">("all");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [newComment, setNewComment] = useState("");
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentContent, setEditingCommentContent] = useState("");
   const [newTask, setNewTask] = useState({
     title: "",
     description: "",
@@ -49,10 +54,27 @@ export default function TasksPage() {
     projectId: "",
     dueDate: "",
     tags: [] as string[],
+    submittedLink: "",
+    approverId: "",
   });
   const [newTag, setNewTag] = useState("");
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showPriorityDropdown, setShowPriorityDropdown] = useState(false);
+
+  // For task editing modal
+  const [editForm, setEditForm] = useState({
+    title: "",
+    description: "",
+    priority: "Medium" as TaskPriority,
+    status: "todo" as TaskStatus,
+    assigneeIds: [] as string[],
+    projectId: "",
+    dueDate: "",
+    tags: [] as string[],
+    submittedLink: "",
+    approverId: "",
+  });
+  const [editTag, setEditTag] = useState("");
 
   const filteredTasks = currentTasks.filter((task) => {
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -78,6 +100,8 @@ export default function TasksPage() {
       projectId: "",
       dueDate: "",
       tags: [],
+      submittedLink: "",
+      approverId: "",
     });
   };
 
@@ -85,6 +109,18 @@ export default function TasksPage() {
     if (!selectedTask || !newComment.trim()) return;
     await addTaskComment(selectedTask.id, newComment);
     setNewComment("");
+  };
+
+  const handleEditComment = async (commentId: string) => {
+    if (!selectedTask || !editingCommentContent.trim()) return;
+    await updateTaskComment(selectedTask.id, commentId, editingCommentContent);
+    setEditingCommentId(null);
+    setEditingCommentContent("");
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!selectedTask) return;
+    await deleteTaskComment(selectedTask.id, commentId);
   };
 
   const addTag = () => {
@@ -96,6 +132,66 @@ export default function TasksPage() {
 
   const removeTag = (tag: string) => {
     setNewTask({ ...newTask, tags: newTask.tags.filter((t) => t !== tag) });
+  };
+
+  const addEditTag = () => {
+    if (editTag.trim() && !editForm.tags.includes(editTag.trim())) {
+      setEditForm({ ...editForm, tags: [...editForm.tags, editTag.trim()] });
+      setEditTag("");
+    }
+  };
+
+  const removeEditTag = (tag: string) => {
+    setEditForm({ ...editForm, tags: editForm.tags.filter((t) => t !== tag) });
+  };
+
+  const openEditModal = (task: Task) => {
+    setEditingTask(task);
+    setEditForm({
+      title: task.title,
+      description: task.description || "",
+      priority: task.priority,
+      status: task.status,
+      assigneeIds: task.assigneeIds || [],
+      projectId: task.projectId || "",
+      dueDate: task.dueDate || "",
+      tags: task.tags || [],
+      submittedLink: task.submittedLink || "",
+      approverId: "",
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingTask) return;
+    await updateTask(editingTask.id, {
+      title: editForm.title,
+      description: editForm.description,
+      priority: editForm.priority,
+      status: editForm.status,
+      assigneeIds: editForm.assigneeIds,
+      projectId: editForm.projectId,
+      dueDate: editForm.dueDate,
+      tags: editForm.tags,
+      submittedLink: editForm.submittedLink,
+    });
+    setEditingTask(null);
+    if (selectedTask?.id === editingTask.id) {
+      setSelectedTask({ ...selectedTask, ...editForm });
+    }
+  };
+
+  const handleSubmitLink = async (taskId: string, link: string) => {
+    await updateTask(taskId, { 
+      submittedLink: link, 
+      submissionStatus: "pending" 
+    });
+  };
+
+  const handleApproveSubmission = async (taskId: string, approved: boolean) => {
+    await updateTask(taskId, { 
+      submissionStatus: approved ? "approved" : "rejected",
+      status: approved ? "completed" : "in-progress"
+    });
   };
 
   return (
@@ -203,6 +299,17 @@ export default function TasksPage() {
                     >
                       {task.priority}
                     </span>
+                    {task.submissionStatus && (
+                      <span
+                        className="px-2 py-0.5 rounded-full text-xs font-medium"
+                        style={{ 
+                          background: task.submissionStatus === "approved" ? "#dcfce7" : task.submissionStatus === "rejected" ? "#fee2e2" : "#fef3c7",
+                          color: task.submissionStatus === "approved" ? "#16a34a" : task.submissionStatus === "rejected" ? "#dc2626" : "#d97706"
+                        }}
+                      >
+                        {task.submissionStatus === "pending" ? "Pending Approval" : task.submissionStatus === "approved" ? "Approved" : "Rejected"}
+                      </span>
+                    )}
                   </div>
                   {task.description && (
                     <p className="text-sm truncate mb-2" style={{ color: "#6b7280" }}>{task.description}</p>
@@ -218,6 +325,12 @@ export default function TasksPage() {
                       <span className="flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
                         {new Date(task.dueDate).toLocaleDateString()}
+                      </span>
+                    )}
+                    {task.submittedLink && (
+                      <span className="flex items-center gap-1">
+                        <Link2 className="w-3 h-3" />
+                        Submitted
                       </span>
                     )}
                     {task.comments && task.comments.length > 0 && (
@@ -242,8 +355,8 @@ export default function TasksPage() {
       {/* Create Task Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b" style={{ borderColor: "#e5e7eb" }}>
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b flex-shrink-0" style={{ borderColor: "#e5e7eb" }}>
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold" style={{ color: "#111827" }}>Create Task</h2>
                 <button onClick={() => setShowCreateModal(false)} className="p-1 rounded-lg hover:bg-gray-100">
@@ -251,7 +364,7 @@ export default function TasksPage() {
                 </button>
               </div>
             </div>
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
               <div>
                 <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Title</label>
                 <input
@@ -318,10 +431,35 @@ export default function TasksPage() {
                 </select>
               </div>
               <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Approver (for submissions)</label>
+                <select
+                  value={newTask.approverId}
+                  onChange={(e) => setNewTask({ ...newTask, approverId: e.target.value })}
+                  className="w-full px-4 py-2 rounded-xl border"
+                  style={{ borderColor: "#e5e7eb" }}
+                >
+                  <option value="">Select approver</option>
+                  {currentMembers.map((member) => (
+                    <option key={member.id} value={member.id}>{member.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <DatePicker
                   label="Due Date"
                   value={newTask.dueDate}
                   onChange={(date) => setNewTask({ ...newTask, dueDate: date })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Submit Link (optional)</label>
+                <input
+                  type="url"
+                  value={newTask.submittedLink}
+                  onChange={(e) => setNewTask({ ...newTask, submittedLink: e.target.value })}
+                  className="w-full px-4 py-2 rounded-xl border"
+                  style={{ borderColor: "#e5e7eb" }}
+                  placeholder="https://..."
                 />
               </div>
               <div>
@@ -352,7 +490,7 @@ export default function TasksPage() {
                 </div>
               </div>
             </div>
-            <div className="p-6 border-t flex justify-end gap-3" style={{ borderColor: "#e5e7eb" }}>
+            <div className="p-6 border-t flex justify-end gap-3 flex-shrink-0" style={{ borderColor: "#e5e7eb" }}>
               <button onClick={() => setShowCreateModal(false)} className="px-4 py-2 rounded-xl" style={{ background: "#f3f4f6" }}>
                 Cancel
               </button>
@@ -364,14 +502,164 @@ export default function TasksPage() {
         </div>
       )}
 
-      {/* Task Detail Modal */}
-      {selectedTask && (
+      {/* Edit Task Modal */}
+      {editingTask && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b" style={{ borderColor: "#e5e7eb" }}>
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b flex-shrink-0" style={{ borderColor: "#e5e7eb" }}>
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold" style={{ color: "#111827" }}>Edit Task</h2>
+                <button onClick={() => setEditingTask(null)} className="p-1 rounded-lg hover:bg-gray-100">
+                  <X className="w-5 h-5" style={{ color: "#6b7280" }} />
+                </button>
+              </div>
+            </div>
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Title</label>
+                <input
+                  type="text"
+                  value={editForm.title}
+                  onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                  className="w-full px-4 py-2 rounded-xl border"
+                  style={{ borderColor: "#e5e7eb" }}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Description</label>
+                <textarea
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  className="w-full px-4 py-2 rounded-xl border resize-none"
+                  style={{ borderColor: "#e5e7eb" }}
+                  rows={3}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Status</label>
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value as TaskStatus })}
+                    className="w-full px-4 py-2 rounded-xl border"
+                    style={{ borderColor: "#e5e7eb" }}
+                  >
+                    {(Object.keys(STATUS_CONFIG) as TaskStatus[]).map((status) => (
+                      <option key={status} value={status}>{STATUS_CONFIG[status].label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Priority</label>
+                  <select
+                    value={editForm.priority}
+                    onChange={(e) => setEditForm({ ...editForm, priority: e.target.value as TaskPriority })}
+                    className="w-full px-4 py-2 rounded-xl border"
+                    style={{ borderColor: "#e5e7eb" }}
+                  >
+                    <option value="Low">Low</option>
+                    <option value="Medium">Medium</option>
+                    <option value="High">High</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Assignee</label>
+                <select
+                  value={editForm.assigneeIds[0] || ""}
+                  onChange={(e) => setEditForm({ ...editForm, assigneeIds: e.target.value ? [e.target.value] : [] })}
+                  className="w-full px-4 py-2 rounded-xl border"
+                  style={{ borderColor: "#e5e7eb" }}
+                >
+                  <option value="">Select assignee</option>
+                  {currentMembers.map((member) => (
+                    <option key={member.id} value={member.id}>{member.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Project</label>
+                <select
+                  value={editForm.projectId}
+                  onChange={(e) => setEditForm({ ...editForm, projectId: e.target.value })}
+                  className="w-full px-4 py-2 rounded-xl border"
+                  style={{ borderColor: "#e5e7eb" }}
+                >
+                  <option value="">Select project</option>
+                  {currentProjects.map((project) => (
+                    <option key={project.id} value={project.id}>{project.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <DatePicker
+                  label="Due Date"
+                  value={editForm.dueDate}
+                  onChange={(date) => setEditForm({ ...editForm, dueDate: date })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Submit Link</label>
+                <input
+                  type="url"
+                  value={editForm.submittedLink}
+                  onChange={(e) => setEditForm({ ...editForm, submittedLink: e.target.value })}
+                  className="w-full px-4 py-2 rounded-xl border"
+                  style={{ borderColor: "#e5e7eb" }}
+                  placeholder="https://..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Tags</label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {editForm.tags.map((tag) => (
+                    <span key={tag} className="flex items-center gap-1 px-2 py-1 rounded-lg text-sm" style={{ background: "#f3f4f6" }}>
+                      {tag}
+                      <button onClick={() => removeEditTag(tag)} className="hover:text-red-500">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={editTag}
+                    onChange={(e) => setEditTag(e.target.value)}
+                    onKeyPress={(e) => e.key === "Enter" && addEditTag()}
+                    className="flex-1 px-4 py-2 rounded-xl border"
+                    style={{ borderColor: "#e5e7eb" }}
+                    placeholder="Add tag"
+                  />
+                  <button onClick={addEditTag} className="px-4 py-2 rounded-xl" style={{ background: "#f3f4f6" }}>
+                    Add
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="p-6 border-t flex justify-end gap-3 flex-shrink-0" style={{ borderColor: "#e5e7eb" }}>
+              <button onClick={() => setEditingTask(null)} className="px-4 py-2 rounded-xl" style={{ background: "#f3f4f6" }}>
+                Cancel
+              </button>
+              <button onClick={handleSaveEdit} className="px-4 py-2 rounded-xl text-white" style={{ background: "#f59e0b" }}>
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Task Detail Modal */}
+      {selectedTask && !editingTask && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b flex-shrink-0" style={{ borderColor: "#e5e7eb" }}>
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold" style={{ color: "#111827" }}>{selectedTask.title}</h2>
                 <div className="flex items-center gap-2">
+                  <button onClick={() => openEditModal(selectedTask)} className="p-2 rounded-lg hover:bg-gray-100">
+                    <Pencil className="w-4 h-4" style={{ color: "#6b7280" }} />
+                  </button>
                   <button onClick={() => { deleteTask(selectedTask.id); setSelectedTask(null); }} className="p-2 rounded-lg hover:bg-red-50">
                     <Trash2 className="w-4 h-4" style={{ color: "#ef4444" }} />
                   </button>
@@ -381,7 +669,7 @@ export default function TasksPage() {
                 </div>
               </div>
             </div>
-            <div className="p-6">
+            <div className="p-6 overflow-y-auto flex-1">
               {selectedTask.description && (
                 <p className="mb-4" style={{ color: "#6b7280" }}>{selectedTask.description}</p>
               )}
@@ -409,6 +697,92 @@ export default function TasksPage() {
                   </span>
                 </div>
               </div>
+
+              {/* Submit Link Section */}
+              <div className="border-t pt-4 mb-4" style={{ borderColor: "#e5e7eb" }}>
+                <h3 className="font-medium mb-3 flex items-center gap-2" style={{ color: "#111827" }}>
+                  <Link2 className="w-4 h-4" />
+                  Submission
+                </h3>
+                {selectedTask.submittedLink ? (
+                  <div className="p-3 rounded-lg" style={{ background: "#f9fafb" }}>
+                    <div className="flex items-center justify-between mb-2">
+                      <a 
+                        href={selectedTask.submittedLink} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 text-sm hover:underline"
+                        style={{ color: "#3b82f6" }}
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        {selectedTask.submittedLink}
+                      </a>
+                      {selectedTask.submissionStatus && (
+                        <span
+                          className="px-2 py-0.5 rounded-full text-xs font-medium"
+                          style={{ 
+                            background: selectedTask.submissionStatus === "approved" ? "#dcfce7" : selectedTask.submissionStatus === "rejected" ? "#fee2e2" : "#fef3c7",
+                            color: selectedTask.submissionStatus === "approved" ? "#16a34a" : selectedTask.submissionStatus === "rejected" ? "#dc2626" : "#d97706"
+                          }}
+                        >
+                          {selectedTask.submissionStatus}
+                        </span>
+                      )}
+                    </div>
+                    {selectedTask.submissionStatus === "pending" && (
+                      <div className="flex gap-2 mt-2">
+                        <button 
+                          onClick={() => handleApproveSubmission(selectedTask.id, true)}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm text-white"
+                          style={{ background: "#22c55e" }}
+                        >
+                          <Check className="w-4 h-4" /> Approve
+                        </button>
+                        <button 
+                          onClick={() => handleApproveSubmission(selectedTask.id, false)}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm text-white"
+                          style={{ background: "#ef4444" }}
+                        >
+                          <XCircle className="w-4 h-4" /> Reject
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      placeholder="Paste your submission link..."
+                      className="flex-1 px-4 py-2 rounded-xl border text-sm"
+                      style={{ borderColor: "#e5e7eb" }}
+                      onKeyPress={(e) => {
+                        if (e.key === "Enter") {
+                          const input = e.target as HTMLInputElement;
+                          if (input.value.trim()) {
+                            handleSubmitLink(selectedTask.id, input.value.trim());
+                            setSelectedTask({ ...selectedTask, submittedLink: input.value.trim(), submissionStatus: "pending" });
+                            input.value = "";
+                          }
+                        }
+                      }}
+                    />
+                    <button 
+                      onClick={(e) => {
+                        const input = (e.target as HTMLElement).previousElementSibling as HTMLInputElement;
+                        if (input.value.trim()) {
+                          handleSubmitLink(selectedTask.id, input.value.trim());
+                          setSelectedTask({ ...selectedTask, submittedLink: input.value.trim(), submissionStatus: "pending" });
+                          input.value = "";
+                        }
+                      }}
+                      className="px-4 py-2 rounded-xl text-white text-sm"
+                      style={{ background: "#f59e0b" }}
+                    >
+                      Submit
+                    </button>
+                  </div>
+                )}
+              </div>
               
               {/* Comments */}
               <div className="border-t pt-4" style={{ borderColor: "#e5e7eb" }}>
@@ -416,15 +790,62 @@ export default function TasksPage() {
                 <div className="space-y-3 mb-4">
                   {selectedTask.comments?.map((comment) => (
                     <div key={comment.id} className="p-3 rounded-lg" style={{ background: "#f9fafb" }}>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium text-sm" style={{ color: "#111827" }}>
-                          {comment.authorName || "Unknown"}
-                        </span>
-                        <span className="text-xs" style={{ color: "#9ca3af" }}>
-                          {new Date(comment.createdAt).toLocaleDateString()}
-                        </span>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm" style={{ color: "#111827" }}>
+                            {comment.authorName || "Unknown"}
+                          </span>
+                          <span className="text-xs" style={{ color: "#9ca3af" }}>
+                            {new Date(comment.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                        {comment.authorId === currentUser?.id && (
+                          <div className="flex items-center gap-1">
+                            <button 
+                              onClick={() => {
+                                setEditingCommentId(comment.id);
+                                setEditingCommentContent(comment.content);
+                              }}
+                              className="p-1 rounded hover:bg-gray-200"
+                            >
+                              <Pencil className="w-3 h-3" style={{ color: "#6b7280" }} />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteComment(comment.id)}
+                              className="p-1 rounded hover:bg-red-100"
+                            >
+                              <Trash2 className="w-3 h-3" style={{ color: "#ef4444" }} />
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      <p className="text-sm" style={{ color: "#6b7280" }}>{comment.content}</p>
+                      {editingCommentId === comment.id ? (
+                        <div className="flex gap-2 mt-2">
+                          <input
+                            type="text"
+                            value={editingCommentContent}
+                            onChange={(e) => setEditingCommentContent(e.target.value)}
+                            className="flex-1 px-3 py-1.5 rounded-lg border text-sm"
+                            style={{ borderColor: "#e5e7eb" }}
+                          />
+                          <button 
+                            onClick={() => handleEditComment(comment.id)}
+                            className="px-3 py-1.5 rounded-lg text-white text-sm"
+                            style={{ background: "#f59e0b" }}
+                          >
+                            Save
+                          </button>
+                          <button 
+                            onClick={() => { setEditingCommentId(null); setEditingCommentContent(""); }}
+                            className="px-3 py-1.5 rounded-lg text-sm"
+                            style={{ background: "#f3f4f6" }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="text-sm" style={{ color: "#6b7280" }}>{comment.content}</p>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -439,7 +860,7 @@ export default function TasksPage() {
                     placeholder="Add a comment..."
                   />
                   <button onClick={handleAddComment} className="px-4 py-2 rounded-xl text-white" style={{ background: "#f59e0b" }}>
-                    Send
+                    <Send className="w-4 h-4" />
                   </button>
                 </div>
               </div>

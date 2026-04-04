@@ -94,6 +94,8 @@ export async function POST(
       .from("messages")
       .insert({
         team_id: teamId,
+        author_id: user.id,
+        author_name: profile?.name || "Unknown",
         sender_id: user.id,
         sender_name: profile?.name || "Unknown",
         content: content.trim(),
