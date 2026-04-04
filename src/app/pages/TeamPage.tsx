@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useApp, UserRole, Activity } from "../context/AppContext";
+import { useApp, UserRole, Activity } from "@/context/AppContext";
 import { UserPlus, Users, Activity as ActivityIcon, Crown, Shield, User, X, Mail, MoreHorizontal, CheckCircle, FolderOpen, MessageSquare, CalendarDays, Megaphone, LogIn, ChevronDown } from "lucide-react";
 
 const ROLE_CONFIG: Record<UserRole, { color: string; bg: string; icon: typeof Crown }> = {

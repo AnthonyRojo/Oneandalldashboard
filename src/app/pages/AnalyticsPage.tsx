@@ -1,4 +1,4 @@
-import { useApp } from "../context/AppContext";
+import { useApp } from "@/context/AppContext";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell, Legend

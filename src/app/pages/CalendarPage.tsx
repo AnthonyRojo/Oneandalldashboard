@@ -1,10 +1,10 @@
 import { useState, useCallback } from "react";
-import { useApp, CalendarEvent, EventType } from "../context/AppContext";
+import { useApp, CalendarEvent, EventType } from "@/context/AppContext";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, isToday, addMonths, subMonths } from "date-fns";
 import { ChevronLeft, ChevronRight, Plus, X, Clock, Link, Video, Eye, FileText, HelpCircle, Pencil, Trash2, ExternalLink, Save } from "lucide-react";
-import DatePicker from "../components/ui/DatePicker";
+import DatePicker from "@/components/ui/DatePicker";
 
 // ── Color palette — high contrast, disability-friendly (WCAG AA) ───────────────
 const EVENT_COLORS: Record<EventType, { color: string; bg: string; dot: string; border: string; text: string }> = {

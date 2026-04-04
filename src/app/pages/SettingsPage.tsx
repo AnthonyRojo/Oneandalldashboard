@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { useApp } from "../context/AppContext";
+import { useApp } from "@/context/AppContext";
 import { User, Bell, Lock, Palette, Globe, Trash2, Save, ChevronRight, Eye, EyeOff, Check } from "lucide-react";
-import { supabase } from "../lib/supabase";
-import { api } from "../lib/api";
+import { supabase } from "@/lib/supabase/client";
+import { api } from "@/lib/api";
 
 const AVATAR_COLORS = ["#f59e0b", "#3b82f6", "#8b5cf6", "#10b981", "#ec4899", "#f97316"];
 function getAvatarColor(n: string) {
