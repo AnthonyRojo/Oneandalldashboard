@@ -381,10 +381,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
       refreshTimerRef.current = setTimeout(() => {
         if (tokenRef.current && currentTeamRef.current && currentUserIdRef.current) {
-          console.log("[v0] Realtime: refreshing team data");
           loadTeamData(currentTeamRef.current, tokenRef.current, currentUserIdRef.current);
         }
-      }, 500);
+      }, 100); // Faster refresh for snappier UI
     };
 
     channel

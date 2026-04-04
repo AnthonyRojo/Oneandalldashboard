@@ -33,11 +33,11 @@ export async function GET(
       teamId: e.team_id,
       title: e.title,
       description: e.description,
-      date: e.date || (e.start_time as string)?.split("T")[0],
+      type: (e.type as string) || "Other",
+      date: (e.start_time as string)?.split("T")[0],
       startTime: e.start_time,
       endTime: e.end_time,
-      type: e.type || "Meeting",
-      link: e.link,
+      allDay: e.all_day,
       location: e.location,
       color: e.color,
       createdAt: e.created_at,
@@ -64,8 +64,27 @@ export async function POST(
     const supabase = getSupabaseAdmin();
 
     // Parse dates - handle various formats
+    const parseDateTime = (input: string | Date | undefined): string | null => {
+      if (!input) return null;
+      const date = input instanceof Date ? input : new Date(input);
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        console.log("[v0] Invalid date input:", input);
+        return null;
+      }
+      // Return ISO string with timezone
+      return date.toISOString();
+    };
+
     const startTime = body.startTime || body.start || body.date;
     const endTime = body.endTime || body.end || startTime;
+    
+    const startTimeISO = parseDateTime(startTime);
+    const endTimeISO = parseDateTime(endTime);
+    
+    if (!startTimeISO) {
+      return serverError("Start time is required and must be a valid date");
+    }
     
     const { data: event, error } = await supabase
       .from("events")
@@ -73,12 +92,11 @@ export async function POST(
         team_id: teamId,
         title: body.title,
         description: body.description,
-        date: body.date ? new Date(body.date).toISOString().split("T")[0] : (startTime ? new Date(startTime).toISOString().split("T")[0] : null),
-        start_time: startTime,
-        end_time: endTime,
-        type: body.type || "Meeting",
-        link: body.link,
-        location: body.location,
+        type: body.type || "Other",
+        start_time: startTimeISO,
+        end_time: endTimeISO || startTimeISO,
+        all_day: body.allDay || false,
+        location: body.location || null,
         color: body.color || "#3b82f6",
         created_by: user.id,
       })
@@ -92,11 +110,11 @@ export async function POST(
       teamId: event.team_id,
       title: event.title,
       description: event.description,
-      date: event.date || event.start_time?.split("T")[0],
+      type: (event.type as string) || "Other",
+      date: (event.start_time as string)?.split("T")[0],
       startTime: event.start_time,
       endTime: event.end_time,
-      type: event.type,
-      link: event.link,
+      allDay: event.all_day,
       location: event.location,
       color: event.color,
       createdAt: event.created_at,

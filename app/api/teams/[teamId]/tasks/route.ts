@@ -45,22 +45,29 @@ export async function GET(
     }
 
     const formatted = (tasks || []).map((t: Record<string, unknown>) => {
-      const assignee = profilesMap[t.assignee_id as string];
+      const assigneeIdArray = (t.assignee_ids as string[]) || (t.assignee_id ? [t.assignee_id as string] : []);
+      const assigneeNames = assigneeIdArray
+        .map((id) => profilesMap[id]?.name)
+        .filter(Boolean)
+        .join(", ");
+
       return {
         id: t.id,
         teamId: t.team_id,
         projectId: t.project_id,
         title: t.title,
         description: t.description,
-        status: t.status,
-        priority: t.priority,
+        status: (t.status as string)?.toLowerCase() || "todo",
+        priority: (t.priority as string)?.charAt(0).toUpperCase() + (t.priority as string)?.slice(1).toLowerCase() || "Medium",
         assigneeId: t.assignee_id,
-        assigneeIds: t.assignee_id ? [t.assignee_id] : [],
-        assigneeName: assignee?.name,
+        assigneeIds: assigneeIdArray,
+        assigneeName: assigneeNames || "",
         dueDate: t.due_date,
         tags: t.tags || [],
         createdAt: t.created_at,
-        comments: [],
+        comments: t.comments || [],
+        submissionStatus: t.submission_status || "none",
+        submittedLink: t.submitted_link || "",
       };
     });
 
@@ -84,6 +91,20 @@ export async function POST(
     const body = await request.json();
     const supabase = getSupabaseAdmin();
 
+    // Support multiple assignees
+    const assigneeIds = body.assigneeIds && body.assigneeIds.length > 0 ? body.assigneeIds : (body.assigneeId ? [body.assigneeId] : []);
+    
+    // Validate assignees exist if provided
+    let validAssigneeIds = assigneeIds;
+    if (assigneeIds.length > 0) {
+      const { data: assignees } = await supabase
+        .from("profiles")
+        .select("id")
+        .in("id", assigneeIds);
+      
+      validAssigneeIds = (assignees || []).map((a) => a.id);
+    }
+
     const { data: task, error } = await supabase
       .from("tasks")
       .insert({
@@ -92,8 +113,9 @@ export async function POST(
         title: body.title,
         description: body.description,
         status: body.status || "todo",
-        priority: body.priority || "Medium",
-        assignee_id: body.assigneeId || body.assigneeIds?.[0] || null,
+        priority: (body.priority || "Medium").toLowerCase(),
+        assignee_id: validAssigneeIds[0] || null,
+        assignee_ids: validAssigneeIds.length > 0 ? validAssigneeIds : null,
         due_date: body.dueDate || null,
         tags: body.tags || [],
         created_by: user.id,
@@ -103,20 +125,23 @@ export async function POST(
 
     if (error) throw error;
 
+    const assigneeIdArray = (task.assignee_ids as string[]) || (task.assignee_id ? [task.assignee_id as string] : []);
     const formatted = {
       id: task.id,
       teamId: task.team_id,
       projectId: task.project_id,
       title: task.title,
       description: task.description,
-      status: task.status,
-      priority: task.priority,
+      status: (task.status as string)?.toLowerCase() || "todo",
+      priority: (task.priority as string)?.charAt(0).toUpperCase() + (task.priority as string)?.slice(1).toLowerCase() || "Medium",
       assigneeId: task.assignee_id,
-      assigneeIds: task.assignee_id ? [task.assignee_id] : [],
+      assigneeIds: assigneeIdArray,
       dueDate: task.due_date,
       tags: task.tags || [],
       createdAt: task.created_at,
       comments: [],
+      submissionStatus: task.submission_status || "none",
+      submittedLink: task.submitted_link || "",
     };
 
     await logActivity(teamId, user.id, "created task", "task", task.id, {

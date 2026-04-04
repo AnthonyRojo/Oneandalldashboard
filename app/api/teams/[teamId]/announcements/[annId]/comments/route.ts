@@ -57,20 +57,24 @@ export async function POST(
       .update({ comments })
       .eq("id", annId)
       .eq("team_id", teamId)
-      .select(`
-        *,
-        author:created_by (id, name, email, avatar_url)
-      `)
+      .select()
       .single();
 
     if (error) throw error;
 
-    const author = announcement.author as Record<string, unknown> | null;
+    // Get author profile separately
+    const { data: author } = await supabase
+      .from("profiles")
+      .select("id, name, email, avatar_url")
+      .eq("id", announcement.author_id)
+      .single();
+
     const formatted = {
       id: announcement.id,
       teamId: announcement.team_id,
-      authorId: announcement.created_by,
-      authorName: author?.name || "Unknown",
+      authorId: announcement.author_id,
+      authorName: author?.name || announcement.author_name || "Unknown",
+      title: announcement.title,
       content: announcement.content,
       type: announcement.type,
       pinned: announcement.pinned,

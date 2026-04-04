@@ -45,6 +45,9 @@ export default function TasksPage() {
   const [newComment, setNewComment] = useState("");
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentContent, setEditingCommentContent] = useState("");
+  const [replyingToCommentId, setReplyingToCommentId] = useState<string | null>(null);
+  const [replyContent, setReplyContent] = useState("");
+  const [resolvedComments, setResolvedComments] = useState<Set<string>>(new Set());
   const [newTask, setNewTask] = useState({
     title: "",
     description: "",
@@ -60,6 +63,9 @@ export default function TasksPage() {
   const [newTag, setNewTag] = useState("");
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showPriorityDropdown, setShowPriorityDropdown] = useState(false);
+  const [approvalFeedback, setApprovalFeedback] = useState<{ taskId: string; approved: boolean } | null>(null);
+  const [editTag, setEditTag] = useState("");
+  const [editNewTag, setEditNewTag] = useState("");
 
   // For task editing modal
   const [editForm, setEditForm] = useState({
@@ -74,7 +80,12 @@ export default function TasksPage() {
     submittedLink: "",
     approverId: "",
   });
-  const [editTag, setEditTag] = useState("");
+  // Find the current user's member record and check if they can approve
+  // Check both id and userId since members can be matched by either
+  const userMember = currentMembers.find((m) => m.id === currentUser?.id || m.userId === currentUser?.id);
+  const currentUserRole = userMember?.role?.toLowerCase();
+  // Allow approval if role is owner or admin
+  const canApprove = currentUserRole === "owner" || currentUserRole === "admin";
 
   const filteredTasks = currentTasks.filter((task) => {
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -107,19 +118,46 @@ export default function TasksPage() {
 
   const handleAddComment = async () => {
     if (!selectedTask || !newComment.trim()) return;
-    await addTaskComment(selectedTask.id, newComment);
+    // Optimistic update - add comment immediately to UI
+    const optimisticComment = {
+      id: `temp-${Date.now()}`,
+      content: newComment,
+      authorId: currentUser?.id || "",
+      authorName: currentUser?.email?.split("@")[0] || "You",
+      createdAt: new Date().toISOString(),
+    };
+    setSelectedTask({
+      ...selectedTask,
+      comments: [...(selectedTask.comments || []), optimisticComment]
+    });
     setNewComment("");
+    // Update backend
+    await addTaskComment(selectedTask.id, newComment);
   };
 
   const handleEditComment = async (commentId: string) => {
     if (!selectedTask || !editingCommentContent.trim()) return;
-    await updateTaskComment(selectedTask.id, commentId, editingCommentContent);
+    // Optimistic update
+    setSelectedTask({
+      ...selectedTask,
+      comments: selectedTask.comments?.map(c => 
+        c.id === commentId ? { ...c, content: editingCommentContent } : c
+      ) || []
+    });
     setEditingCommentId(null);
     setEditingCommentContent("");
+    // Update backend
+    await updateTaskComment(selectedTask.id, commentId, editingCommentContent);
   };
 
   const handleDeleteComment = async (commentId: string) => {
     if (!selectedTask) return;
+    // Optimistic update
+    setSelectedTask({
+      ...selectedTask,
+      comments: selectedTask.comments?.filter(c => c.id !== commentId) || []
+    });
+    // Update backend
     await deleteTaskComment(selectedTask.id, commentId);
   };
 
@@ -192,6 +230,8 @@ export default function TasksPage() {
       submissionStatus: approved ? "approved" : "rejected",
       status: approved ? "completed" : "in-progress"
     });
+    setApprovalFeedback({ taskId, approved });
+    setTimeout(() => setApprovalFeedback(null), 2000);
   };
 
   return (
@@ -312,7 +352,7 @@ export default function TasksPage() {
                     )}
                   </div>
                   {task.description && (
-                    <p className="text-sm truncate mb-2" style={{ color: "#6b7280" }}>{task.description}</p>
+                    <p className="text-sm line-clamp-2 mb-2 break-words" style={{ color: "#6b7280" }}>{task.description}</p>
                   )}
                   <div className="flex items-center gap-4 text-sm" style={{ color: "#9ca3af" }}>
                     {assignee && (
@@ -417,18 +457,26 @@ export default function TasksPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Assignee</label>
-                <select
-                  value={newTask.assigneeIds[0] || ""}
-                  onChange={(e) => setNewTask({ ...newTask, assigneeIds: e.target.value ? [e.target.value] : [] })}
-                  className="w-full px-4 py-2 rounded-xl border"
-                  style={{ borderColor: "#e5e7eb" }}
-                >
-                  <option value="">Select assignee</option>
+                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Assignees (select multiple)</label>
+                <div className="space-y-2 border rounded-xl p-3" style={{ borderColor: "#e5e7eb" }}>
                   {currentMembers.map((member) => (
-                    <option key={member.id} value={member.id}>{member.name}</option>
+                    <label key={member.id} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={newTask.assigneeIds.includes(member.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setNewTask({ ...newTask, assigneeIds: [...newTask.assigneeIds, member.id] });
+                          } else {
+                            setNewTask({ ...newTask, assigneeIds: newTask.assigneeIds.filter((id) => id !== member.id) });
+                          }
+                        }}
+                        className="rounded"
+                      />
+                      <span style={{ color: "#374151" }}>{member.name}</span>
+                    </label>
                   ))}
-                </select>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Approver (for submissions)</label>
@@ -564,18 +612,26 @@ export default function TasksPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Assignee</label>
-                <select
-                  value={editForm.assigneeIds[0] || ""}
-                  onChange={(e) => setEditForm({ ...editForm, assigneeIds: e.target.value ? [e.target.value] : [] })}
-                  className="w-full px-4 py-2 rounded-xl border"
-                  style={{ borderColor: "#e5e7eb" }}
-                >
-                  <option value="">Select assignee</option>
+                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Assignees (select multiple)</label>
+                <div className="space-y-2 border rounded-xl p-3" style={{ borderColor: "#e5e7eb" }}>
                   {currentMembers.map((member) => (
-                    <option key={member.id} value={member.id}>{member.name}</option>
+                    <label key={member.id} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editForm.assigneeIds.includes(member.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setEditForm({ ...editForm, assigneeIds: [...editForm.assigneeIds, member.id] });
+                          } else {
+                            setEditForm({ ...editForm, assigneeIds: editForm.assigneeIds.filter((id) => id !== member.id) });
+                          }
+                        }}
+                        className="rounded"
+                      />
+                      <span style={{ color: "#374151" }}>{member.name}</span>
+                    </label>
                   ))}
-                </select>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Project</label>
@@ -671,7 +727,7 @@ export default function TasksPage() {
             </div>
             <div className="p-6 overflow-y-auto flex-1">
               {selectedTask.description && (
-                <p className="mb-4" style={{ color: "#6b7280" }}>{selectedTask.description}</p>
+                <p className="mb-4 break-words whitespace-pre-wrap" style={{ color: "#6b7280" }}>{selectedTask.description}</p>
               )}
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <div>
@@ -681,6 +737,21 @@ export default function TasksPage() {
                     onChange={(e) => {
                       updateTask(selectedTask.id, { status: e.target.value as TaskStatus });
                       setSelectedTask({ ...selectedTask, status: e.target.value as TaskStatus });
+                      // Force refresh tasks data after status change for immediate stats update
+                      setTimeout(() => {
+                        if (currentTeam?.id) {
+                          fetch(`/api/teams/${currentTeam.id}/tasks`, {
+                            headers: { "Content-Type": "application/json" },
+                          })
+                            .then(res => res.json())
+                            .then(data => {
+                              if (data && Array.isArray(data)) {
+                                console.log("[v0] Tasks refetched after status change");
+                              }
+                            })
+                            .catch(err => console.error("[v0] Error refetching tasks:", err));
+                        }
+                      }, 50);
                     }}
                     className="px-3 py-1.5 rounded-lg border text-sm"
                     style={{ borderColor: "#e5e7eb" }}
@@ -729,22 +800,36 @@ export default function TasksPage() {
                         </span>
                       )}
                     </div>
-                    {selectedTask.submissionStatus === "pending" && (
-                      <div className="flex gap-2 mt-2">
+                    {selectedTask.submissionStatus === "pending" && canApprove && (
+                      <div className="flex gap-3 mt-4">
                         <button 
                           onClick={() => handleApproveSubmission(selectedTask.id, true)}
-                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm text-white"
+                          className="flex items-center gap-2 flex-1 px-4 py-3 rounded-lg text-sm font-medium text-white transition-all hover:shadow-md"
                           style={{ background: "#22c55e" }}
                         >
-                          <Check className="w-4 h-4" /> Approve
+                          <Check className="w-5 h-5" /> Approve
                         </button>
                         <button 
                           onClick={() => handleApproveSubmission(selectedTask.id, false)}
-                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm text-white"
+                          className="flex items-center gap-2 flex-1 px-4 py-3 rounded-lg text-sm font-medium text-white transition-all hover:shadow-md"
                           style={{ background: "#ef4444" }}
                         >
-                          <XCircle className="w-4 h-4" /> Reject
+                          <XCircle className="w-5 h-5" /> Reject
                         </button>
+                      </div>
+                    )}
+                    {selectedTask.submissionStatus === "pending" && !canApprove && (
+                      <div className="mt-4 p-3 rounded-lg text-sm" style={{ background: "#f3f4f6", color: "#6b7280" }}>
+                        Only team admins and owners can approve submissions.
+                      </div>
+                    )}
+                    {approvalFeedback?.taskId === selectedTask.id && (
+                      <div className="flex items-center gap-2 mt-3 px-4 py-2 rounded-lg text-sm font-medium" style={{ 
+                        background: approvalFeedback.approved ? "#dcfce7" : "#fee2e2",
+                        color: approvalFeedback.approved ? "#16a34a" : "#dc2626"
+                      }}>
+                        <Check className="w-4 h-4" />
+                        {approvalFeedback.approved ? "Approved successfully!" : "Rejected successfully!"}
                       </div>
                     )}
                   </div>
@@ -789,7 +874,7 @@ export default function TasksPage() {
                 <h3 className="font-medium mb-4" style={{ color: "#111827" }}>Comments</h3>
                 <div className="space-y-3 mb-4">
                   {selectedTask.comments?.map((comment) => (
-                    <div key={comment.id} className="p-3 rounded-lg" style={{ background: "#f9fafb" }}>
+                    <div key={comment.id} className="p-3 rounded-lg" style={{ background: resolvedComments.has(comment.id) ? "#f0fdf4" : "#f9fafb" }}>
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-sm" style={{ color: "#111827" }}>
@@ -798,9 +883,25 @@ export default function TasksPage() {
                           <span className="text-xs" style={{ color: "#9ca3af" }}>
                             {new Date(comment.createdAt).toLocaleDateString()}
                           </span>
+                          {resolvedComments.has(comment.id) && (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: "#dcfce7", color: "#16a34a" }}>
+                              ✓ Resolved
+                            </span>
+                          )}
                         </div>
                         {comment.authorId === currentUser?.id && (
                           <div className="flex items-center gap-1">
+                            <button 
+                              onClick={() => setResolvedComments(prev => {
+                                const next = new Set(prev);
+                                next.has(comment.id) ? next.delete(comment.id) : next.add(comment.id);
+                                return next;
+                              })}
+                              className="p-1 rounded hover:bg-green-100"
+                              title={resolvedComments.has(comment.id) ? "Mark as unresolved" : "Mark as resolved"}
+                            >
+                              <Check className="w-3 h-3" style={{ color: resolvedComments.has(comment.id) ? "#16a34a" : "#9ca3af" }} />
+                            </button>
                             <button 
                               onClick={() => {
                                 setEditingCommentId(comment.id);
@@ -844,7 +945,76 @@ export default function TasksPage() {
                           </button>
                         </div>
                       ) : (
-                        <p className="text-sm" style={{ color: "#6b7280" }}>{comment.content}</p>
+                        <>
+                          <p className="text-sm mb-2" style={{ color: "#6b7280" }}>{comment.content}</p>
+                          <button 
+                            onClick={() => setReplyingToCommentId(replyingToCommentId === comment.id ? null : comment.id)}
+                            className="text-xs font-medium transition-colors"
+                            style={{ color: "#3b82f6" }}
+                          >
+                            {replyingToCommentId === comment.id ? "Cancel Reply" : "Reply"}
+                          </button>
+                          {replyingToCommentId === comment.id && (
+                            <div className="flex gap-2 mt-2">
+                              <input
+                                type="text"
+                                value={replyContent}
+                                onChange={(e) => setReplyContent(e.target.value)}
+                                placeholder="Write a reply..."
+                                className="flex-1 px-3 py-1.5 rounded-lg border text-sm"
+                                style={{ borderColor: "#e5e7eb" }}
+                                onKeyPress={(e) => {
+                                  if (e.key === "Enter" && replyContent.trim()) {
+                                    const replyText = `@${comment.authorName} ${replyContent}`;
+                                    // Optimistic update
+                                    const optimisticReply = {
+                                      id: `temp-${Date.now()}`,
+                                      content: replyText,
+                                      authorId: currentUser?.id || "",
+                                      authorName: currentUser?.email?.split("@")[0] || "You",
+                                      createdAt: new Date().toISOString(),
+                                    };
+                                    setSelectedTask({
+                                      ...selectedTask,
+                                      comments: [...(selectedTask.comments || []), optimisticReply]
+                                    });
+                                    setReplyContent("");
+                                    setReplyingToCommentId(null);
+                                    // Update backend
+                                    addTaskComment(selectedTask.id, replyText);
+                                  }
+                                }}
+                              />
+                              <button 
+                                onClick={() => {
+                                  if (replyContent.trim()) {
+                                    const replyText = `@${comment.authorName} ${replyContent}`;
+                                    // Optimistic update
+                                    const optimisticReply = {
+                                      id: `temp-${Date.now()}`,
+                                      content: replyText,
+                                      authorId: currentUser?.id || "",
+                                      authorName: currentUser?.email?.split("@")[0] || "You",
+                                      createdAt: new Date().toISOString(),
+                                    };
+                                    setSelectedTask({
+                                      ...selectedTask,
+                                      comments: [...(selectedTask.comments || []), optimisticReply]
+                                    });
+                                    setReplyContent("");
+                                    setReplyingToCommentId(null);
+                                    // Update backend
+                                    addTaskComment(selectedTask.id, replyText);
+                                  }
+                                }}
+                                className="px-3 py-1.5 rounded-lg text-white text-sm"
+                                style={{ background: "#3b82f6" }}
+                              >
+                                <Send className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   ))}

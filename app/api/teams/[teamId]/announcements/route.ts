@@ -51,10 +51,10 @@ export async function GET(
         teamId: a.team_id,
         authorId: a.author_id,
         authorName: author?.name || a.author_name || "Unknown",
+        title: a.title,
         content: a.content,
-        type: a.type || "update",
+        type: a.type || "info",
         pinned: a.pinned || false,
-        priority: a.priority,
         likes: a.likes || [],
         comments: a.comments || [],
         pollOptions: a.poll_options,
@@ -92,12 +92,17 @@ export async function POST(
       .eq("id", user.id)
       .single();
 
+    // Validate type is one of the allowed values
+    const validTypes = ["info", "alert", "poll", "milestone"];
+    const announcementType = validTypes.includes(body.type) ? body.type : "info";
+
     const { data: announcement, error } = await supabase
       .from("announcements")
       .insert({
         team_id: teamId,
+        title: body.title || "",
         content: body.content,
-        type: body.type || "info",
+        type: announcementType,
         pinned: false,
         likes: [],
         comments: [],
@@ -114,8 +119,9 @@ export async function POST(
     const formatted = {
       id: announcement.id,
       teamId: announcement.team_id,
-      authorId: announcement.created_by,
+      authorId: announcement.author_id,
       authorName: profile?.name || "Unknown",
+      title: announcement.title,
       content: announcement.content,
       type: announcement.type,
       pinned: announcement.pinned,
