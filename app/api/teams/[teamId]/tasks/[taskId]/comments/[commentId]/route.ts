@@ -102,7 +102,7 @@ export async function DELETE(
     if (fetchError) throw fetchError;
 
     const comments: TaskComment[] = (existing.comments || []).filter(
-      (c) => c.id !== commentId
+      (c: TaskComment) => c.id !== commentId
     );
 
     const { data: task, error } = await supabase
