@@ -620,7 +620,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Calls your API to create the team
-      const res = await api.createTeam(name, tokenRef.current);
+      const res = await api.createTeam(name, currentUserIdRef.current, tokenRef.current);
       const newTeam = res.team;
 
       // Update the local state with the new team
