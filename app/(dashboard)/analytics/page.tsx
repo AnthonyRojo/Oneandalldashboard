@@ -35,7 +35,7 @@ export default function AnalyticsPage() {
         return isAssignedViaId || isAssignedViaIds;
       });
       const completedTasks = memberTasks.filter((t) => (t.status as string)?.toLowerCase() === "completed").length;
-      const memberActivities = currentActivities.filter((a) => a.userId === member.id || a.userId === member.Id);
+      const memberActivities = currentActivities.filter((a) => a.userId === member.id || a.userId === member.id);
       
       return {
         ...member,
