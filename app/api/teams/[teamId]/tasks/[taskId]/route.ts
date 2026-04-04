@@ -27,7 +27,10 @@ export async function PUT(
     if (updates.status !== undefined) updateData.status = updates.status;
     if (updates.priority !== undefined) updateData.priority = updates.priority;
     if (updates.assigneeId !== undefined) updateData.assignee_id = updates.assigneeId;
-    if (updates.assigneeIds !== undefined) updateData.assignee_id = updates.assigneeIds?.[0] || null;
+    if (updates.assigneeIds !== undefined) {
+      updateData.assignee_ids = updates.assigneeIds.length > 0 ? updates.assigneeIds : null;
+      updateData.assignee_id = updates.assigneeIds?.[0] || null;
+    }
     if (updates.dueDate !== undefined) updateData.due_date = updates.dueDate;
     if (updates.projectId !== undefined) updateData.project_id = updates.projectId;
     if (updates.tags !== undefined) updateData.tags = updates.tags;
@@ -45,6 +48,7 @@ export async function PUT(
 
     if (error) throw error;
 
+    const assigneeIdArray = (task.assignee_ids as string[]) || (task.assignee_id ? [task.assignee_id as string] : []);
     const formatted = {
       id: task.id,
       teamId: task.team_id,
@@ -54,7 +58,7 @@ export async function PUT(
       status: task.status,
       priority: task.priority,
       assigneeId: task.assignee_id,
-      assigneeIds: task.assignee_id ? [task.assignee_id] : [],
+      assigneeIds: assigneeIdArray,
       dueDate: task.due_date,
       tags: task.tags || [],
       submittedLink: task.submitted_link,
