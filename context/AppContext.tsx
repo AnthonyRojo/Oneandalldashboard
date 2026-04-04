@@ -384,7 +384,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           console.log("[v0] Realtime: refreshing team data");
           loadTeamData(currentTeamRef.current, tokenRef.current, currentUserIdRef.current);
         }
-      }, 500);
+      }, 200); // Reduced from 500ms to 200ms for faster updates
     };
 
     channel
