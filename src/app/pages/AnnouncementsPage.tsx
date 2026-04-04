@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useApp, AnnouncementType, Announcement, PollOption } from "../context/AppContext";
+import { useApp, AnnouncementType, Announcement, PollOption } from "@/context/AppContext";
 import {
   Pin, Heart, MessageSquare, ChevronDown, ChevronUp, Plus, Paperclip,
   Tag, Send, Megaphone, MoreHorizontal, Filter, Pencil, Trash2, X, Check,

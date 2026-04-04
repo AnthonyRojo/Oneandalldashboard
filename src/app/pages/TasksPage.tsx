@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { useApp, Task, TaskPriority, TaskStatus } from "../context/AppContext";
+import { useApp, Task, TaskPriority, TaskStatus } from "@/context/AppContext";
 import {
   Plus, Search, Filter, CheckCircle, Clock, AlertCircle, MessageSquare,
   X, Send, ChevronDown, Tag, Pencil, Trash2, ExternalLink,
   ThumbsUp, ThumbsDown, Check, Save, Users, Calendar
 } from "lucide-react";
-import DatePicker from "../components/ui/DatePicker";
+import DatePicker from "@/components/ui/DatePicker";
 
 // Helper — get assignee IDs from a task (supports legacy single assigneeId)
 function getAssigneeIds(task: Task): string[] {
