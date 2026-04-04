@@ -177,7 +177,7 @@ export default function CalendarPage() {
             </div>
             <div className="divide-y max-h-[250px] overflow-y-auto" style={{ borderColor: "#f0f0ea" }}>
               {todayEvents.length > 0 ? todayEvents.map((event) => {
-                const Icon = EVENT_ICONS[event.type];
+                const Icon = EVENT_ICONS[event.type] || Clock;
                 return (
                   <button 
                     key={event.id} 
@@ -212,7 +212,7 @@ export default function CalendarPage() {
             </div>
             <div className="divide-y max-h-[250px] overflow-y-auto" style={{ borderColor: "#f0f0ea" }}>
               {upcomingEvents.length > 0 ? upcomingEvents.map((event) => {
-                const Icon = EVENT_ICONS[event.type];
+                const Icon = EVENT_ICONS[event.type] || Clock;
                 return (
                   <button 
                     key={event.id} 
