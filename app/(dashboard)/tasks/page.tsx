@@ -78,8 +78,8 @@ export default function TasksPage() {
     submittedLink: "",
     approverId: "",
   });
-  const currentUserRole = currentMembers.find((m) => m.id === currentUser?.id)?.role;
-  const canApprove = currentUserRole === "Owner" || currentUserRole === "Admin";
+  const currentUserRole = currentMembers.find((m) => m.id === currentUser?.id)?.role?.toLowerCase();
+  const canApprove = currentUserRole === "owner" || currentUserRole === "admin";
 
   const filteredTasks = currentTasks.filter((task) => {
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||

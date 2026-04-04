@@ -9,10 +9,10 @@ export default function AnalyticsPage() {
   const [activityPage, setActivityPage] = useState(0);
 
   const tasksByStatus = {
-    todo: currentTasks.filter((t) => t.status === "todo").length,
-    "in-progress": currentTasks.filter((t) => t.status === "in-progress").length,
-    review: currentTasks.filter((t) => t.status === "review").length,
-    completed: currentTasks.filter((t) => t.status === "completed").length,
+    todo: currentTasks.filter((t) => (t.status as string)?.toLowerCase() === "todo").length,
+    "in-progress": currentTasks.filter((t) => (t.status as string)?.toLowerCase() === "in-progress").length,
+    review: currentTasks.filter((t) => (t.status as string)?.toLowerCase() === "review").length,
+    completed: currentTasks.filter((t) => (t.status as string)?.toLowerCase() === "completed").length,
   };
 
   const tasksByPriority = {
@@ -30,10 +30,13 @@ export default function AnalyticsPage() {
   const memberStats = useMemo(() => {
     const stats = currentMembers.map((member) => {
       const memberTasks = currentTasks.filter((t) => {
-        const assignedToMember = t.assigneeId === member.id || (Array.isArray(t.assigneeIds) && t.assigneeIds.includes(member.id));
-        return assignedToMember;
+        // Check both assigneeId (single) and assigneeIds (multiple)
+        const isAssignedViaId = t.assigneeId === member.id;
+        const isAssignedViaIds = Array.isArray(t.assigneeIds) && t.assigneeIds.includes(member.id);
+        return isAssignedViaId || isAssignedViaIds;
       });
-      const completedTasks = memberTasks.filter((t) => t.status === "completed").length;
+      // Normalize status to lowercase for comparison
+      const completedTasks = memberTasks.filter((t) => (t.status as string)?.toLowerCase() === "completed").length;
       const memberActivities = currentActivities.filter((a) => a.userId === member.id);
       return {
         ...member,
@@ -43,9 +46,6 @@ export default function AnalyticsPage() {
         recentAction: memberActivities[0]?.action || "No recent activity"
       };
     }).sort((a, b) => b.totalTasks - a.totalTasks);
-    
-    console.log("[v0] Tasks with assignees:", currentTasks.filter(t => t.assigneeId || t.assigneeIds?.length).map(t => ({ title: t.title, assigneeId: t.assigneeId, assigneeIds: t.assigneeIds, status: t.status })));
-    console.log("[v0] Member stats:", stats.map(m => ({ name: m.name, totalTasks: m.totalTasks, completedTasks: m.completedTasks })));
     
     return stats;
   }, [currentMembers, currentTasks, currentActivities]);
