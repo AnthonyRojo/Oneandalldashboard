@@ -5,7 +5,7 @@ import { useApp } from "@/context/AppContext";
 import { TrendingUp, Users, CheckCircle, Calendar, Activity, ChevronRight } from "lucide-react";
 
 export default function AnalyticsPage() {
-  const { currentTasks, currentMembers, currentEvents, currentActivities } = useApp();
+  const { currentTasks, currentMembers, currentEvents, currentActivities, currentTeam } = useApp();
   const [activityPage, setActivityPage] = useState(0);
 
   const tasksByStatus = {
@@ -30,15 +30,13 @@ export default function AnalyticsPage() {
   const memberStats = useMemo(() => {
     const stats = currentMembers.map((member) => {
       const memberTasks = currentTasks.filter((t) => {
-        // Check both assigneeId (single) and assigneeIds (multiple)
-        // Also check both member.id and member.userId since either could match
         const isAssignedViaId = t.assigneeId === member.id || t.assigneeId === member.userId;
         const isAssignedViaIds = Array.isArray(t.assigneeIds) && (t.assigneeIds.includes(member.id) || t.assigneeIds.includes(member.userId));
         return isAssignedViaId || isAssignedViaIds;
       });
-      // Normalize status to lowercase for comparison
       const completedTasks = memberTasks.filter((t) => (t.status as string)?.toLowerCase() === "completed").length;
       const memberActivities = currentActivities.filter((a) => a.userId === member.id || a.userId === member.userId);
+      
       return {
         ...member,
         totalTasks: memberTasks.length,
