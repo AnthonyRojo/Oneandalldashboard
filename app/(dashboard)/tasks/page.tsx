@@ -80,13 +80,12 @@ export default function TasksPage() {
     submittedLink: "",
     approverId: "",
   });
-  const currentUserRole = currentMembers.find((m) => m.id === currentUser?.id)?.role?.toLowerCase();
+  // Find the current user's member record and check if they can approve
+  // Check both id and userId since members can be matched by either
+  const userMember = currentMembers.find((m) => m.id === currentUser?.id || m.userId === currentUser?.id);
+  const currentUserRole = userMember?.role?.toLowerCase();
+  // Allow approval if role is owner or admin
   const canApprove = currentUserRole === "owner" || currentUserRole === "admin";
-  
-  // Debug approval check
-  if (typeof window !== "undefined") {
-    console.log("[v0] User role check - ID:", currentUser?.id, "Role:", currentUserRole, "canApprove:", canApprove);
-  }
 
   const filteredTasks = currentTasks.filter((task) => {
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||

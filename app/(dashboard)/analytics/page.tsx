@@ -31,13 +31,14 @@ export default function AnalyticsPage() {
     const stats = currentMembers.map((member) => {
       const memberTasks = currentTasks.filter((t) => {
         // Check both assigneeId (single) and assigneeIds (multiple)
-        const isAssignedViaId = t.assigneeId === member.id;
-        const isAssignedViaIds = Array.isArray(t.assigneeIds) && t.assigneeIds.includes(member.id);
+        // Also check both member.id and member.userId since either could match
+        const isAssignedViaId = t.assigneeId === member.id || t.assigneeId === member.userId;
+        const isAssignedViaIds = Array.isArray(t.assigneeIds) && (t.assigneeIds.includes(member.id) || t.assigneeIds.includes(member.userId));
         return isAssignedViaId || isAssignedViaIds;
       });
       // Normalize status to lowercase for comparison
       const completedTasks = memberTasks.filter((t) => (t.status as string)?.toLowerCase() === "completed").length;
-      const memberActivities = currentActivities.filter((a) => a.userId === member.id);
+      const memberActivities = currentActivities.filter((a) => a.userId === member.id || a.userId === member.userId);
       return {
         ...member,
         totalTasks: memberTasks.length,
@@ -46,22 +47,6 @@ export default function AnalyticsPage() {
         recentAction: memberActivities[0]?.action || "No recent activity"
       };
     }).sort((a, b) => b.totalTasks - a.totalTasks);
-    
-    // Debug logging
-    if (typeof window !== "undefined") {
-      console.log("[v0] Member Stats Debug:");
-      console.log("[v0] All tasks:", currentTasks.map(t => ({ 
-        title: t.title, 
-        assigneeId: t.assigneeId, 
-        assigneeIds: t.assigneeIds,
-        status: t.status
-      })));
-      console.log("[v0] Member stats calculated:", stats.map(m => ({ 
-        name: m.name, 
-        totalTasks: m.totalTasks, 
-        completedTasks: m.completedTasks 
-      })));
-    }
     
     return stats;
   }, [currentMembers, currentTasks, currentActivities]);
