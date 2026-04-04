@@ -132,7 +132,7 @@ export default function TeamPage() {
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 {/* Status selector - users can change their own status, admins/owners can change anyone's */}
-                {(member.userId === currentUser?.id || member.id === currentUser?.id || isOwnerOrAdmin) && (
+                {(member.id === currentUser?.id || isOwnerOrAdmin) && (
                   <select 
                     value={member.status} 
                     onChange={(e) => updateMember(member.id, { status: e.target.value as MemberStatus })} 
@@ -145,7 +145,7 @@ export default function TeamPage() {
                     <option value="Offline">Offline</option>
                   </select>
                 )}
-                {isOwnerOrAdmin && member.id !== currentUser?.id && member.userId !== currentUser?.id && member.role !== "Owner" && (
+                {isOwnerOrAdmin && member.id !== currentUser?.id && member.role !== "Owner" && (
                   <>
                     <select value={member.role} onChange={(e) => updateMember(member.id, { role: e.target.value as UserRole })} className="px-3 py-1.5 rounded-lg border text-sm" style={{ borderColor: "#e5e7eb" }}>
                       <option value="Member">Member</option>
