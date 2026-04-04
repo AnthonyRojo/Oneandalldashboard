@@ -25,7 +25,7 @@ export async function PUT(
     if (updates.title !== undefined) updateData.title = updates.title;
     if (updates.description !== undefined) updateData.description = updates.description;
     if (updates.status !== undefined) updateData.status = updates.status;
-    if (updates.priority !== undefined) updateData.priority = updates.priority;
+    if (updates.priority !== undefined) updateData.priority = (updates.priority as string)?.toLowerCase() || "medium";
     if (updates.assigneeId !== undefined) updateData.assignee_id = updates.assigneeId || null;
     if (updates.assigneeIds !== undefined) {
       updateData.assignee_ids = updates.assigneeIds.length > 0 ? updates.assigneeIds : null;
