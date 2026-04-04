@@ -79,6 +79,7 @@ export interface Task {
   tags: string[];
   submittedLink?: string;
   submissionStatus?: "pending" | "approved" | "rejected";
+  approverId?: string; // <--- Add this line here
   comments: TaskComment[];
   createdAt?: string;
 }
@@ -694,21 +695,102 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setChatGroups([]);
   }, []);
 
-  // ── Team ops ───────────────────────────────────────────────────────────────
-  const createTeam = useCallback(
-    async (name: string): Promise<void> => {
-      if (!tokenRef.current || !currentUserIdRef.current) throw new Error("Not authenticated — please log in again.");
-      const colors = ["#f59e0b", "#3b82f6", "#8b5cf6", "#10b981", "#ec4899", "#f97316"];
-      const color = colors[Math.floor(Math.random() * colors.length)];
-      const res = await api.createTeam(name, color, tokenRef.current);
-      const newTeam: Team = res.team;
-      setTeams((prev) => [...prev, newTeam]);
-      setCurrentTeamIdState(newTeam.id);
-      currentTeamRef.current = newTeam.id;
-      subscribeToTeam(newTeam.id);
-      await loadTeamData(newTeam.id, tokenRef.current!, currentUserIdRef.current!);
+// ── Task ops ───────────────────────────────────────────────────────────────
+  const addTask = useCallback(
+    async (task: Omit<Task, "id" | "teamId" | "comments">) => {
+      if (!tokenRef.current || !currentTeamId) return;
+      const res = await api.createTask(currentTeamId, task, tokenRef.current);
+      setTasks((prev) => [...prev, res.task]);
+      // Realtime will auto-detect this change
     },
-    [loadTeamData, subscribeToTeam]
+    [currentTeamId]
+  );
+
+  const updateTask = useCallback(
+    async (id: string, updates: Partial<Task>) => {
+      if (!tokenRef.current || !currentTeamId) return;
+      
+      // Optimistic UI update
+      setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
+      
+      const res = await api.updateTask(currentTeamId, id, updates, tokenRef.current);
+      
+      let calculatedProgress = 0;
+      let shouldUpdateProgress = false;
+      const targetProjectId = res.task?.projectId;
+
+      // Update tasks and calculate new progress based on the freshest state
+      setTasks((prev) => {
+        const updated = prev.map((t) => (t.id === id ? res.task : t));
+        
+        if (updates.status !== undefined && targetProjectId) {
+          shouldUpdateProgress = true;
+          const projectTasks = updated.filter(
+            (t) => t.teamId === currentTeamId && t.projectId === targetProjectId
+          );
+          const total = projectTasks.length;
+          const done = projectTasks.filter((t) => t.status === "completed").length;
+          calculatedProgress = total > 0 ? Math.round((done / total) * 100) : 0;
+        }
+        
+        return updated;
+      });
+
+      // Safely perform side effects OUTSIDE the state setter function
+      if (shouldUpdateProgress && targetProjectId) {
+        setProjects((p) =>
+          p.map((proj) => (proj.id === targetProjectId ? { ...proj, progress: calculatedProgress } : proj))
+        );
+
+        if (tokenRef.current) {
+          api
+            .updateProject(currentTeamId, targetProjectId, { progress: calculatedProgress }, tokenRef.current)
+            .catch((e) => console.log(`Auto-progress update error: ${e}`));
+        }
+      }
+      // Realtime will auto-detect this change
+    },
+    [currentTeamId]
+  );
+
+  const deleteTask = useCallback(
+    async (id: string) => {
+      if (!tokenRef.current || !currentTeamId) return;
+      setTasks((prev) => prev.filter((t) => t.id !== id));
+      await api.deleteTask(currentTeamId, id, tokenRef.current);
+      // Realtime will auto-detect this change
+    },
+    [currentTeamId]
+  );
+
+  const addTaskComment = useCallback(
+    async (taskId: string, content: string) => {
+      if (!tokenRef.current || !currentTeamId || !content.trim()) return;
+      const res = await api.addTaskComment(currentTeamId, taskId, content, tokenRef.current);
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? res.task : t)));
+      // Realtime will auto-detect this change
+    },
+    [currentTeamId]
+  );
+
+  const updateTaskComment = useCallback(
+    async (taskId: string, commentId: string, content: string) => {
+      if (!tokenRef.current || !currentTeamId || !content.trim()) return;
+      const res = await api.updateTaskComment(currentTeamId, taskId, commentId, content, tokenRef.current);
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? res.task : t)));
+      // Realtime will auto-detect this change
+    },
+    [currentTeamId]
+  );
+
+  const deleteTaskComment = useCallback(
+    async (taskId: string, commentId: string) => {
+      if (!tokenRef.current || !currentTeamId) return;
+      const res = await api.deleteTaskComment(currentTeamId, taskId, commentId, tokenRef.current);
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? res.task : t)));
+      // Realtime will auto-detect this change
+    },
+    [currentTeamId]
   );
 
   // ── Member ops ─────────────────────────────────────────────────────────────
