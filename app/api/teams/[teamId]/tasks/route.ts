@@ -92,7 +92,7 @@ export async function POST(
         title: body.title,
         description: body.description,
         status: body.status || "todo",
-        priority: body.priority || "Medium",
+        priority: (body.priority || "medium").toLowerCase(),
         assignee_id: body.assigneeId || body.assigneeIds?.[0] || null,
         due_date: body.dueDate || null,
         tags: body.tags || [],
