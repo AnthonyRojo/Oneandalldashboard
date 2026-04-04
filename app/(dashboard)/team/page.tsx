@@ -84,15 +84,31 @@ export default function TeamPage() {
                   <Mail className="w-3 h-3" /> {member.email}
                 </div>
               </div>
-              {isOwnerOrAdmin && member.id !== currentUser?.id && member.role !== "Owner" && (
-                <div className="flex items-center gap-2">
-                  <select value={member.role} onChange={(e) => updateMember(member.id, { role: e.target.value as UserRole })} className="px-3 py-1.5 rounded-lg border text-sm" style={{ borderColor: "#e5e7eb" }}>
-                    <option value="Member">Member</option>
-                    <option value="Admin">Admin</option>
+              <div className="flex items-center gap-2">
+                {/* Status selector - users can change their own status, admins/owners can change anyone's */}
+                {(member.id === currentUser?.id || isOwnerOrAdmin) && (
+                  <select 
+                    value={member.status} 
+                    onChange={(e) => updateMember(member.id, { status: e.target.value as MemberStatus })} 
+                    className="px-3 py-1.5 rounded-lg border text-sm" 
+                    style={{ borderColor: "#e5e7eb" }}
+                  >
+                    <option value="Available">Available</option>
+                    <option value="Busy">Busy</option>
+                    <option value="Away">Away</option>
+                    <option value="Offline">Offline</option>
                   </select>
-                  <button onClick={() => removeMember(member.id)} className="p-2 rounded-lg hover:bg-red-50"><Trash2 className="w-4 h-4" style={{ color: "#ef4444" }} /></button>
-                </div>
-              )}
+                )}
+                {isOwnerOrAdmin && member.id !== currentUser?.id && member.role !== "Owner" && (
+                  <>
+                    <select value={member.role} onChange={(e) => updateMember(member.id, { role: e.target.value as UserRole })} className="px-3 py-1.5 rounded-lg border text-sm" style={{ borderColor: "#e5e7eb" }}>
+                      <option value="Member">Member</option>
+                      <option value="Admin">Admin</option>
+                    </select>
+                    <button onClick={() => removeMember(member.id)} className="p-2 rounded-lg hover:bg-red-50"><Trash2 className="w-4 h-4" style={{ color: "#ef4444" }} /></button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         ))}

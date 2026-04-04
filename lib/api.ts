@@ -1,20 +1,15 @@
-const projectId = "xaspntugpvaadjbrtgmn";
-const publicAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhhc3BudHVncHZhYWRqYnJ0Z21uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyNTkzNDIsImV4cCI6MjA5MDgzNTM0Mn0.yoxF4TPzIe6ReD11qLgvZHfXgO-3LSUGj1vBvPhz_GY";
+// API client that calls local Next.js API routes instead of external Edge Function
 
-const BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-7d783630`;
+const BASE_URL = "/api";
 
 export async function apiFetch(
   path: string,
   options: RequestInit = {},
   accessToken?: string | null
 ) {
-  // Always send the anon key as Authorization so Supabase's invocation layer
-  // never rejects the request. Pass the actual user JWT in a custom header
-  // that our Hono server reads for authentication.
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    "Authorization": `Bearer ${publicAnonKey}`,
-    ...(accessToken ? { "x-user-token": accessToken } : {}),
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
     ...(options.headers as Record<string, string>),
   };
 
@@ -29,11 +24,13 @@ export async function apiFetch(
 }
 
 export const api = {
-  // Auth
-  signup: (name: string, email: string, password: string) =>
-    apiFetch("/auth/signup", { method: "POST", body: JSON.stringify({ name, email, password }) }),
-  changePassword: (newPassword: string, token: string) =>
-    apiFetch("/auth/change-password", { method: "POST", body: JSON.stringify({ newPassword }) }, token),
+  // Auth - signup now handled directly via Supabase in AppContext
+  signup: async () => {
+    throw new Error("Signup should be handled directly via Supabase Auth");
+  },
+  changePassword: async () => {
+    throw new Error("Change password should be handled directly via Supabase Auth");
+  },
 
   // Teams
   getTeams: (token: string) => apiFetch("/teams", {}, token),
@@ -121,10 +118,10 @@ export const api = {
     groupId
       ? apiFetch(`/teams/${teamId}/chat-groups/${groupId}/messages`, { method: "POST", body: JSON.stringify({ content }) }, token)
       : apiFetch(`/teams/${teamId}/messages`, { method: "POST", body: JSON.stringify({ content }) }, token),
-  editMessage: (teamId: string, messageId: string, content: string, token: string, groupId?: string) =>
-    apiFetch(`/teams/${teamId}/messages/${messageId}`, { method: "PUT", body: JSON.stringify({ content, groupId }) }, token),
-  deleteMessage: (teamId: string, messageId: string, token: string, groupId?: string) =>
-    apiFetch(`/teams/${teamId}/messages/${messageId}${groupId ? `?groupId=${groupId}` : ""}`, { method: "DELETE" }, token),
+  editMessage: (teamId: string, messageId: string, content: string, token: string) =>
+    apiFetch(`/teams/${teamId}/messages/${messageId}`, { method: "PUT", body: JSON.stringify({ content }) }, token),
+  deleteMessage: (teamId: string, messageId: string, token: string) =>
+    apiFetch(`/teams/${teamId}/messages/${messageId}`, { method: "DELETE" }, token),
   getGroupMessages: (teamId: string, groupId: string, token: string) =>
     apiFetch(`/teams/${teamId}/chat-groups/${groupId}/messages`, {}, token),
   getChatGroups: (teamId: string, token: string) =>
