@@ -612,6 +612,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [loadTeamData, subscribeToTeam]
   );
 
+// ── Create team ────────────────────────────────────────────────────────────
+  const createTeam = useCallback(
+    async (name: string) => {
+      if (!tokenRef.current || !currentUserIdRef.current) {
+        throw new Error("You must be logged in to create a team.");
+      }
+
+      // Calls your API to create the team
+      const res = await api.createTeam(name, tokenRef.current);
+      const newTeam = res.team;
+
+      // Update the local state with the new team
+      setTeams((prev) => [...prev, newTeam]);
+
+      // Automatically switch the user to their newly created team
+      setCurrentTeamIdState(newTeam.id);
+      currentTeamRef.current = newTeam.id;
+      subscribeToTeam(newTeam.id);
+      await loadTeamData(newTeam.id, tokenRef.current, currentUserIdRef.current);
+    },
+    [loadTeamData, subscribeToTeam]
+  );
+  
   // ── Auth ───────────────────────────────────────────────────────────────────
   const login = useCallback(
     async (email: string, password: string): Promise<boolean> => {
