@@ -57,7 +57,7 @@ export async function GET(
         projectId: t.project_id,
         title: t.title,
         description: t.description,
-        status: t.status,
+        status: (t.status as string)?.toLowerCase() || "todo",
         priority: t.priority,
         assigneeId: t.assignee_id,
         assigneeIds: assigneeIdArray,

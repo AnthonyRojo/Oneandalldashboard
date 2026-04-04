@@ -15,6 +15,17 @@ export default function AnalyticsPage() {
     completed: currentTasks.filter((t) => t.status === "completed").length,
   };
 
+  if (typeof window !== "undefined") {
+    console.log("[v0] currentTasks sample:", currentTasks.slice(0, 3).map(t => ({ 
+      id: t.id, 
+      title: t.title, 
+      status: t.status,
+      assigneeId: t.assigneeId,
+      assigneeIds: t.assigneeIds
+    })));
+    console.log("[v0] Completed tasks count:", currentTasks.filter(t => t.status === "completed").length);
+  }
+
   const tasksByPriority = {
     Low: currentTasks.filter((t) => t.priority === "Low").length,
     Medium: currentTasks.filter((t) => t.priority === "Medium").length,
