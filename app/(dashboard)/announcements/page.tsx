@@ -191,7 +191,11 @@ export default function AnnouncementsPage() {
       <div className="space-y-4">
         {sortedAnnouncements.map((announcement) => {
           const author = currentMembers.find((m) => m.id === announcement.authorId);
-          const TypeIcon = TYPE_CONFIG[announcement.type].icon;
+          
+          // ADDED: Fallback config if the type is missing or invalid
+          const typeConfig = TYPE_CONFIG[announcement.type] || { label: "Announcement", icon: Megaphone, color: "#6b7280" };
+          const TypeIcon = typeConfig.icon;
+          
           const totalVotes = announcement.pollVotes ? Object.keys(announcement.pollVotes).length : 0;
           const hasLiked = currentUser && announcement.likes.includes(currentUser.id);
           const showComments = expandedComments === announcement.id;
