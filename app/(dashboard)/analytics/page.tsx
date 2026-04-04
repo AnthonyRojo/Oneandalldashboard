@@ -48,31 +48,6 @@ export default function AnalyticsPage() {
       };
     }).sort((a, b) => b.totalTasks - a.totalTasks);
     
-    if (typeof window !== "undefined") {
-      console.log("[v0] ===== MEMBER STATS CALCULATION DEBUG =====");
-      console.log("[v0] Members in system:", currentMembers.map(m => ({ id: m.id, userId: m.userId, name: m.name })));
-      console.log("[v0] Total tasks count:", currentTasks.length);
-      console.log("[v0] Sample tasks:", currentTasks.slice(0, 5).map(t => ({ 
-        title: t.title, 
-        assigneeId: t.assigneeId, 
-        assigneeIds: t.assigneeIds,
-        status: t.status
-      })));
-      
-      stats.forEach(stat => {
-        const memberTaskDetails = currentTasks.filter((t) => {
-          const isAssignedViaId = t.assigneeId === stat.id || t.assigneeId === stat.userId;
-          const isAssignedViaIds = Array.isArray(t.assigneeIds) && (t.assigneeIds.includes(stat.id) || t.assigneeIds.includes(stat.userId));
-          return isAssignedViaId || isAssignedViaIds;
-        });
-        console.log(`[v0] Member: ${stat.name} (id=${stat.id}, userId=${stat.userId})`);
-        console.log(`[v0]   Total tasks assigned: ${stat.totalTasks}, Completed: ${stat.completedTasks}`);
-        if (memberTaskDetails.length > 0) {
-          console.log(`[v0]   Task details:`, memberTaskDetails.map(t => ({ title: t.title, status: t.status, assigneeId: t.assigneeId, assigneeIds: t.assigneeIds })));
-        }
-      });
-    }
-    
     return stats;
   }, [currentMembers, currentTasks, currentActivities]);
 

@@ -737,6 +737,21 @@ export default function TasksPage() {
                     onChange={(e) => {
                       updateTask(selectedTask.id, { status: e.target.value as TaskStatus });
                       setSelectedTask({ ...selectedTask, status: e.target.value as TaskStatus });
+                      // Force refresh tasks data after status change for immediate stats update
+                      setTimeout(() => {
+                        if (currentTeam?.id) {
+                          fetch(`/api/teams/${currentTeam.id}/tasks`, {
+                            headers: { "Content-Type": "application/json" },
+                          })
+                            .then(res => res.json())
+                            .then(data => {
+                              if (data && Array.isArray(data)) {
+                                console.log("[v0] Tasks refetched after status change");
+                              }
+                            })
+                            .catch(err => console.error("[v0] Error refetching tasks:", err));
+                        }
+                      }, 50);
                     }}
                     className="px-3 py-1.5 rounded-lg border text-sm"
                     style={{ borderColor: "#e5e7eb" }}

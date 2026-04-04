@@ -378,19 +378,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     // Debounced refresh to avoid too many API calls
     const scheduleRefresh = () => {
-      console.log("[v0] scheduleRefresh called");
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
       refreshTimerRef.current = setTimeout(() => {
-        console.log("[v0] Refresh timer fired - calling loadTeamData");
         if (tokenRef.current && currentTeamRef.current && currentUserIdRef.current) {
-          console.log("[v0] Realtime: refreshing team data");
           loadTeamData(currentTeamRef.current, tokenRef.current, currentUserIdRef.current);
-        } else {
-          console.log("[v0] Refresh failed - missing token/team/userId", {
-            hasToken: !!tokenRef.current,
-            hasTeam: !!currentTeamRef.current,
-            hasUserId: !!currentUserIdRef.current
-          });
         }
       }, 100); // Faster refresh for snappier UI
     };
@@ -406,10 +397,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "tasks", filter: `team_id=eq.${teamId}` },
-        (payload) => {
-          console.log("[v0] Real-time: tasks table change detected", payload);
-          scheduleRefresh();
-        }
+        () => scheduleRefresh()
       )
       // Events changes
       .on(
