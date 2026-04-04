@@ -96,6 +96,7 @@ export async function POST(
       .from("announcements")
       .insert({
         team_id: teamId,
+        title: body.title || "",
         content: body.content,
         type: body.type || "info",
         pinned: false,
@@ -114,8 +115,9 @@ export async function POST(
     const formatted = {
       id: announcement.id,
       teamId: announcement.team_id,
-      authorId: announcement.created_by,
+      authorId: announcement.author_id,
       authorName: profile?.name || "Unknown",
+      title: announcement.title,
       content: announcement.content,
       type: announcement.type,
       pinned: announcement.pinned,
