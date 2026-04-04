@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useApp } from "@/context/AppContext";
 import { TrendingUp, Users, CheckCircle, Calendar, Activity, ChevronRight } from "lucide-react";
 
@@ -15,17 +15,6 @@ export default function AnalyticsPage() {
     completed: currentTasks.filter((t) => t.status === "completed").length,
   };
 
-  if (typeof window !== "undefined") {
-    console.log("[v0] currentTasks sample:", currentTasks.slice(0, 3).map(t => ({ 
-      id: t.id, 
-      title: t.title, 
-      status: t.status,
-      assigneeId: t.assigneeId,
-      assigneeIds: t.assigneeIds
-    })));
-    console.log("[v0] Completed tasks count:", currentTasks.filter(t => t.status === "completed").length);
-  }
-
   const tasksByPriority = {
     Low: currentTasks.filter((t) => t.priority === "Low").length,
     Medium: currentTasks.filter((t) => t.priority === "Medium").length,
@@ -37,22 +26,24 @@ export default function AnalyticsPage() {
   const paginatedActivities = sortedActivities.slice(activityPage * 7, (activityPage + 1) * 7);
   const totalPages = Math.ceil(sortedActivities.length / 7);
 
-  // Calculate member stats
-  const memberStats = currentMembers.map((member) => {
-    const memberTasks = currentTasks.filter((t) => {
-      const assignedToMember = t.assigneeId === member.id || (Array.isArray(t.assigneeIds) && t.assigneeIds.includes(member.id));
-      return assignedToMember;
-    });
-    const completedTasks = memberTasks.filter((t) => t.status === "completed").length;
-    const memberActivities = currentActivities.filter((a) => a.userId === member.id);
-    return {
-      ...member,
-      totalTasks: memberTasks.length,
-      completedTasks,
-      activities: memberActivities.length,
-      recentAction: memberActivities[0]?.action || "No recent activity"
-    };
-  }).sort((a, b) => b.totalTasks - a.totalTasks);
+  // Calculate member stats with useMemo to ensure it updates when tasks/members change
+  const memberStats = useMemo(() => {
+    return currentMembers.map((member) => {
+      const memberTasks = currentTasks.filter((t) => {
+        const assignedToMember = t.assigneeId === member.id || (Array.isArray(t.assigneeIds) && t.assigneeIds.includes(member.id));
+        return assignedToMember;
+      });
+      const completedTasks = memberTasks.filter((t) => t.status === "completed").length;
+      const memberActivities = currentActivities.filter((a) => a.userId === member.id);
+      return {
+        ...member,
+        totalTasks: memberTasks.length,
+        completedTasks,
+        activities: memberActivities.length,
+        recentAction: memberActivities[0]?.action || "No recent activity"
+      };
+    }).sort((a, b) => b.totalTasks - a.totalTasks);
+  }, [currentMembers, currentTasks, currentActivities]);
 
   const stats = [
     { label: "Total Tasks", value: currentTasks.length, icon: CheckCircle, color: "#3b82f6" },

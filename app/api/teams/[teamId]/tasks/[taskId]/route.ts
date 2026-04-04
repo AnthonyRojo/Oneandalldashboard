@@ -56,7 +56,7 @@ export async function PUT(
       title: task.title,
       description: task.description,
       status: (task.status as string)?.toLowerCase() || "todo",
-      priority: task.priority,
+      priority: (task.priority as string)?.charAt(0).toUpperCase() + (task.priority as string)?.slice(1).toLowerCase() || "Medium",
       assigneeId: task.assignee_id,
       assigneeIds: assigneeIdArray,
       dueDate: task.due_date,
