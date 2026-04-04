@@ -14,9 +14,9 @@ export default function AnalyticsPage() {
   };
 
   const tasksByPriority = {
-    low: currentTasks.filter((t) => t.priority === "low").length,
-    medium: currentTasks.filter((t) => t.priority === "medium").length,
-    high: currentTasks.filter((t) => t.priority === "high").length,
+    low: currentTasks.filter((t) => t.priority === "Low").length,
+    medium: currentTasks.filter((t) => t.priority === "Medium").length,
+    high: currentTasks.filter((t) => t.priority === "High").length,
   };
 
   const completionRate = currentTasks.length > 0 ? Math.round((tasksByStatus.completed / currentTasks.length) * 100) : 0;
