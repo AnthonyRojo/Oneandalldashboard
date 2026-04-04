@@ -43,6 +43,7 @@ export interface TeamMember {
   avatar: string;
   role: UserRole;
   status: MemberStatus;
+  userId? string;
 }
 
 export interface Project {
