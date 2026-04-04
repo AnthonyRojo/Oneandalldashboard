@@ -6,7 +6,7 @@ import { format, parseISO } from "date-fns";
 import { Calendar, X } from "lucide-react";
 
 interface DatePickerProps {
-  value: string; // "yyyy-MM-dd" or ""
+  value?: string | Date; // "yyyy-MM-dd", Date object, or empty
   onChange: (value: string) => void;
   placeholder?: string;
   label?: string;
@@ -42,7 +42,9 @@ export default function DatePicker({ value, onChange, placeholder = "Pick a date
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  const selected = value ? parseISO(value) : undefined;
+  const selected = value 
+    ? (value instanceof Date ? value : parseISO(value)) 
+    : undefined;
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {

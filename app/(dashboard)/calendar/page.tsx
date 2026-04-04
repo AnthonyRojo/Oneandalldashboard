@@ -9,31 +9,32 @@ import { ChevronLeft, ChevronRight, Plus, X, Clock, Video, Eye, FileText, Trash2
 import DatePicker from "@/components/ui/DatePicker";
 
 const EVENT_COLORS: Record<EventType, string> = {
-  meeting: "#3b82f6",
-  deadline: "#ef4444",
-  review: "#f59e0b",
-  other: "#8b5cf6",
+  Meeting: "#3b82f6",
+  Review: "#f59e0b",
+  Post: "#8b5cf6",
+  Other: "#6b7280",
 };
 
 const EVENT_ICONS: Record<EventType, typeof Video> = {
-  meeting: Video,
-  deadline: Clock,
-  review: Eye,
-  other: FileText,
+  Meeting: Video,
+  Review: Eye,
+  Post: FileText,
+  Other: Clock,
 };
 
 export default function CalendarPage() {
-  const { currentEvents, createEvent, updateEvent, deleteEvent } = useApp();
+  const { currentEvents, addEvent, updateEvent, deleteEvent } = useApp();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [newEvent, setNewEvent] = useState({
     title: "",
     description: "",
-    type: "meeting" as EventType,
-    startDate: "",
-    endDate: "",
-    attendeeIds: [] as string[],
+    type: "Meeting" as EventType,
+    date: "",
+    startTime: "09:00",
+    endTime: "10:00",
+    link: "",
   });
 
   const monthStart = startOfMonth(currentMonth);
@@ -43,33 +44,29 @@ export default function CalendarPage() {
   const calendarDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
 
   const getEventsForDay = (date: Date) => {
-    return currentEvents.filter((event) => {
-      const eventStart = new Date(event.startDate);
-      const eventEnd = event.endDate ? new Date(event.endDate) : eventStart;
-      return date >= new Date(eventStart.toDateString()) && date <= new Date(eventEnd.toDateString());
-    });
+    const dateStr = format(date, "yyyy-MM-dd");
+    return currentEvents.filter((event) => event.date === dateStr);
   };
 
   const handleCreateEvent = async () => {
-    if (!newEvent.title.trim() || !newEvent.startDate) return;
-    await createEvent({
-      ...newEvent,
-      startDate: newEvent.startDate,
-      endDate: newEvent.endDate || newEvent.startDate,
+    if (!newEvent.title.trim() || !newEvent.date) return;
+    await addEvent({
+      title: newEvent.title,
+      description: newEvent.description,
+      date: newEvent.date,
+      startTime: newEvent.startTime,
+      endTime: newEvent.endTime,
+      type: newEvent.type,
+      link: newEvent.link || undefined,
     });
     setShowCreateModal(false);
-    setNewEvent({ title: "", description: "", type: "meeting", startDate: "", endDate: "", attendeeIds: [] });
+    setNewEvent({ title: "", description: "", type: "Meeting", date: "", startTime: "09:00", endTime: "10:00", link: "" });
   };
 
   const handleMoveEvent = useCallback(async (eventId: string, newDate: Date) => {
-    const event = currentEvents.find((e) => e.id === eventId);
-    if (!event) return;
-    const startDate = new Date(event.startDate);
-    const diff = newDate.getTime() - new Date(startDate.toDateString()).getTime();
-    const newStartDate = new Date(startDate.getTime() + diff);
-    const newEndDate = event.endDate ? new Date(new Date(event.endDate).getTime() + diff) : undefined;
-    await updateEvent(eventId, { startDate: newStartDate.toISOString(), endDate: newEndDate?.toISOString() });
-  }, [currentEvents, updateEvent]);
+    const newDateStr = format(newDate, "yyyy-MM-dd");
+    await updateEvent(eventId, { date: newDateStr });
+  }, [updateEvent]);
 
   return (
     <DndProvider backend={HTML5Backend}>
@@ -117,15 +114,28 @@ export default function CalendarPage() {
                 <div>
                   <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Type</label>
                   <select value={newEvent.type} onChange={(e) => setNewEvent({ ...newEvent, type: e.target.value as EventType })} className="w-full px-4 py-2 rounded-xl border" style={{ borderColor: "#e5e7eb" }}>
-                    <option value="meeting">Meeting</option>
-                    <option value="deadline">Deadline</option>
-                    <option value="review">Review</option>
-                    <option value="other">Other</option>
+                    <option value="Meeting">Meeting</option>
+                    <option value="Review">Review</option>
+                    <option value="Post">Post</option>
+                    <option value="Other">Other</option>
                   </select>
                 </div>
+                <div>
+                  <DatePicker label="Date" value={newEvent.date} onChange={(val) => setNewEvent({ ...newEvent, date: val })} />
+                </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <DatePicker label="Start Date" value={newEvent.startDate} onChange={(val) => setNewEvent({ ...newEvent, startDate: val })} />
-                  <DatePicker label="End Date" value={newEvent.endDate} onChange={(val) => setNewEvent({ ...newEvent, endDate: val })} />
+                  <div>
+                    <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Start Time</label>
+                    <input type="time" value={newEvent.startTime} onChange={(e) => setNewEvent({ ...newEvent, startTime: e.target.value })} className="w-full px-4 py-2 rounded-xl border" style={{ borderColor: "#e5e7eb" }} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>End Time</label>
+                    <input type="time" value={newEvent.endTime} onChange={(e) => setNewEvent({ ...newEvent, endTime: e.target.value })} className="w-full px-4 py-2 rounded-xl border" style={{ borderColor: "#e5e7eb" }} />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Link (optional)</label>
+                  <input type="url" value={newEvent.link} onChange={(e) => setNewEvent({ ...newEvent, link: e.target.value })} className="w-full px-4 py-2 rounded-xl border" style={{ borderColor: "#e5e7eb" }} placeholder="https://meet.google.com/..." />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Description</label>
@@ -158,9 +168,24 @@ export default function CalendarPage() {
               <div className="p-6 space-y-4">
                 <div>
                   <p className="text-sm font-medium" style={{ color: "#374151" }}>Date</p>
-                  <p style={{ color: "#6b7280" }}>{format(new Date(selectedEvent.startDate), "MMMM d, yyyy")}{selectedEvent.endDate && selectedEvent.endDate !== selectedEvent.startDate && <> - {format(new Date(selectedEvent.endDate), "MMMM d, yyyy")}</>}</p>
+                  <p style={{ color: "#6b7280" }}>{format(new Date(selectedEvent.date + "T12:00:00"), "MMMM d, yyyy")}</p>
                 </div>
-                {selectedEvent.description && <div><p className="text-sm font-medium" style={{ color: "#374151" }}>Description</p><p style={{ color: "#6b7280" }}>{selectedEvent.description}</p></div>}
+                <div>
+                  <p className="text-sm font-medium" style={{ color: "#374151" }}>Time</p>
+                  <p style={{ color: "#6b7280" }}>{selectedEvent.startTime} - {selectedEvent.endTime}</p>
+                </div>
+                {selectedEvent.link && (
+                  <div>
+                    <p className="text-sm font-medium" style={{ color: "#374151" }}>Link</p>
+                    <a href={selectedEvent.link} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">{selectedEvent.link}</a>
+                  </div>
+                )}
+                {selectedEvent.description && (
+                  <div>
+                    <p className="text-sm font-medium" style={{ color: "#374151" }}>Description</p>
+                    <p style={{ color: "#6b7280" }}>{selectedEvent.description}</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -170,11 +195,11 @@ export default function CalendarPage() {
   );
 }
 
-function CalendarDay({ day, events, isCurrentMonth, isToday, onEventClick, onEventDrop }: { day: Date; events: CalendarEvent[]; isCurrentMonth: boolean; isToday: boolean; onEventClick: (event: CalendarEvent) => void; onEventDrop: (eventId: string, newDate: Date) => void; }) {
-  const [{ isOver }, drop] = useDrop({ accept: "event", drop: (item: { id: string }) => { onEventDrop(item.id, day); }, collect: (monitor) => ({ isOver: monitor.isOver() }) });
+function CalendarDay({ day, events, isCurrentMonth, isToday: isTodayDay, onEventClick, onEventDrop }: { day: Date; events: CalendarEvent[]; isCurrentMonth: boolean; isToday: boolean; onEventClick: (event: CalendarEvent) => void; onEventDrop: (eventId: string, newDate: Date) => void; }) {
+  const [{ isOver }, drop] = useDrop(() => ({ accept: "event", drop: (item: { id: string }) => { onEventDrop(item.id, day); }, collect: (monitor) => ({ isOver: monitor.isOver() }) }), [day, onEventDrop]);
   return (
-    <div ref={drop} className="min-h-[100px] p-2 border-b border-r" style={{ borderColor: "#e5e7eb", background: isOver ? "#fef3c7" : isToday ? "#fffbeb" : "transparent", opacity: isCurrentMonth ? 1 : 0.5 }}>
-      <div className={`text-sm mb-1 ${isToday ? "font-semibold" : ""}`} style={{ color: isToday ? "#f59e0b" : "#374151" }}>{format(day, "d")}</div>
+    <div ref={drop as unknown as React.LegacyRef<HTMLDivElement>} className="min-h-[100px] p-2 border-b border-r" style={{ borderColor: "#e5e7eb", background: isOver ? "#fef3c7" : isTodayDay ? "#fffbeb" : "transparent", opacity: isCurrentMonth ? 1 : 0.5 }}>
+      <div className={`text-sm mb-1 ${isTodayDay ? "font-semibold" : ""}`} style={{ color: isTodayDay ? "#f59e0b" : "#374151" }}>{format(day, "d")}</div>
       <div className="space-y-1">
         {events.slice(0, 3).map((event) => <DraggableEvent key={event.id} event={event} onClick={() => onEventClick(event)} />)}
         {events.length > 3 && <div className="text-xs" style={{ color: "#6b7280" }}>+{events.length - 3} more</div>}
@@ -184,6 +209,6 @@ function CalendarDay({ day, events, isCurrentMonth, isToday, onEventClick, onEve
 }
 
 function DraggableEvent({ event, onClick }: { event: CalendarEvent; onClick: () => void }) {
-  const [{ isDragging }, drag] = useDrag({ type: "event", item: { id: event.id }, collect: (monitor) => ({ isDragging: monitor.isDragging() }) });
-  return <div ref={drag} onClick={onClick} className="px-2 py-1 rounded text-xs truncate cursor-pointer" style={{ background: `${EVENT_COLORS[event.type]}20`, color: EVENT_COLORS[event.type], opacity: isDragging ? 0.5 : 1 }}>{event.title}</div>;
+  const [{ isDragging }, drag] = useDrag(() => ({ type: "event", item: { id: event.id }, collect: (monitor) => ({ isDragging: monitor.isDragging() }) }), [event.id]);
+  return <div ref={drag as unknown as React.LegacyRef<HTMLDivElement>} onClick={onClick} className="px-2 py-1 rounded text-xs truncate cursor-pointer" style={{ background: `${EVENT_COLORS[event.type]}20`, color: EVENT_COLORS[event.type], opacity: isDragging ? 0.5 : 1 }}>{event.title}</div>;
 }

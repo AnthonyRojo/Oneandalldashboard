@@ -4,22 +4,22 @@ import { useState } from "react";
 import { useApp, Task, TaskPriority, TaskStatus } from "@/context/AppContext";
 import {
   Plus, Search, Filter, CheckCircle, Clock, AlertCircle, MessageSquare,
-  X, Send, ChevronDown, Tag, Pencil, Trash2, ExternalLink,
-  ThumbsUp, ThumbsDown, Check, Save, Users, Calendar
+  X, ChevronDown, Tag, Pencil, Trash2,
+  Users, Calendar
 } from "lucide-react";
 import DatePicker from "@/components/ui/DatePicker";
 
 const PRIORITY_COLORS: Record<TaskPriority, string> = {
-  low: "#22c55e",
-  medium: "#f59e0b",
-  high: "#ef4444",
+  Low: "#22c55e",
+  Medium: "#f59e0b",
+  High: "#ef4444",
 };
 
 const STATUS_CONFIG: Record<TaskStatus, { label: string; icon: typeof CheckCircle; color: string }> = {
   todo: { label: "To Do", icon: Clock, color: "#6b7280" },
   "in-progress": { label: "In Progress", icon: AlertCircle, color: "#3b82f6" },
   review: { label: "Review", icon: Clock, color: "#f59e0b" },
-  done: { label: "Done", icon: CheckCircle, color: "#22c55e" },
+  completed: { label: "Completed", icon: CheckCircle, color: "#22c55e" },
 };
 
 export default function TasksPage() {
@@ -27,7 +27,8 @@ export default function TasksPage() {
     currentUser,
     currentTasks,
     currentMembers,
-    createTask,
+    currentProjects,
+    addTask,
     updateTask,
     deleteTask,
     addTaskComment,
@@ -39,13 +40,13 @@ export default function TasksPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [newComment, setNewComment] = useState("");
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [newTask, setNewTask] = useState({
     title: "",
     description: "",
-    priority: "medium" as TaskPriority,
+    priority: "Medium" as TaskPriority,
     status: "todo" as TaskStatus,
-    assigneeId: "",
+    assigneeIds: [] as string[],
+    projectId: "",
     dueDate: "",
     tags: [] as string[],
   });
@@ -63,26 +64,21 @@ export default function TasksPage() {
 
   const handleCreateTask = async () => {
     if (!newTask.title.trim()) return;
-    await createTask({
+    await addTask({
       ...newTask,
-      assigneeId: newTask.assigneeId || currentUser?.id || "",
+      assigneeIds: newTask.assigneeIds.length > 0 ? newTask.assigneeIds : (currentUser?.id ? [currentUser.id] : []),
     });
     setShowCreateModal(false);
     setNewTask({
       title: "",
       description: "",
-      priority: "medium",
+      priority: "Medium",
       status: "todo",
-      assigneeId: "",
+      assigneeIds: [],
+      projectId: "",
       dueDate: "",
       tags: [],
     });
-  };
-
-  const handleUpdateTask = async () => {
-    if (!editingTask) return;
-    await updateTask(editingTask.id, editingTask);
-    setEditingTask(null);
   };
 
   const handleAddComment = async () => {
@@ -163,15 +159,15 @@ export default function TasksPage() {
             style={{ borderColor: "#e5e7eb", background: "white" }}
           >
             <Tag className="w-4 h-4" style={{ color: "#6b7280" }} />
-            {priorityFilter === "all" ? "All Priority" : priorityFilter.charAt(0).toUpperCase() + priorityFilter.slice(1)}
+            {priorityFilter === "all" ? "All Priority" : priorityFilter}
             <ChevronDown className="w-4 h-4" style={{ color: "#6b7280" }} />
           </button>
           {showPriorityDropdown && (
             <div className="absolute top-full mt-1 left-0 bg-white border rounded-xl shadow-lg z-10 min-w-[150px]" style={{ borderColor: "#e5e7eb" }}>
               <button onClick={() => { setPriorityFilter("all"); setShowPriorityDropdown(false); }} className="w-full text-left px-4 py-2 hover:bg-gray-50">All Priority</button>
-              {(["low", "medium", "high"] as TaskPriority[]).map((priority) => (
+              {(["Low", "Medium", "High"] as TaskPriority[]).map((priority) => (
                 <button key={priority} onClick={() => { setPriorityFilter(priority); setShowPriorityDropdown(false); }} className="w-full text-left px-4 py-2 hover:bg-gray-50">
-                  {priority.charAt(0).toUpperCase() + priority.slice(1)}
+                  {priority}
                 </button>
               ))}
             </div>
@@ -182,7 +178,7 @@ export default function TasksPage() {
       {/* Task List */}
       <div className="grid gap-4">
         {filteredTasks.map((task) => {
-          const assignee = currentMembers.find((m) => m.id === task.assigneeId);
+          const assignee = currentMembers.find((m) => task.assigneeIds?.includes(m.id) || m.id === task.assigneeId);
           const StatusIcon = STATUS_CONFIG[task.status].icon;
           return (
             <div
@@ -287,31 +283,45 @@ export default function TasksPage() {
                     className="w-full px-4 py-2 rounded-xl border"
                     style={{ borderColor: "#e5e7eb" }}
                   >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
+                    <option value="Low">Low</option>
+                    <option value="Medium">Medium</option>
+                    <option value="High">High</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Assignee</label>
+                  <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Project</label>
                   <select
-                    value={newTask.assigneeId}
-                    onChange={(e) => setNewTask({ ...newTask, assigneeId: e.target.value })}
+                    value={newTask.projectId}
+                    onChange={(e) => setNewTask({ ...newTask, projectId: e.target.value })}
                     className="w-full px-4 py-2 rounded-xl border"
                     style={{ borderColor: "#e5e7eb" }}
                   >
-                    <option value="">Select assignee</option>
-                    {currentMembers.map((member) => (
-                      <option key={member.id} value={member.id}>{member.name}</option>
+                    <option value="">Select project</option>
+                    {currentProjects.map((project) => (
+                      <option key={project.id} value={project.id}>{project.name}</option>
                     ))}
                   </select>
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Due Date</label>
+                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Assignee</label>
+                <select
+                  value={newTask.assigneeIds[0] || ""}
+                  onChange={(e) => setNewTask({ ...newTask, assigneeIds: e.target.value ? [e.target.value] : [] })}
+                  className="w-full px-4 py-2 rounded-xl border"
+                  style={{ borderColor: "#e5e7eb" }}
+                >
+                  <option value="">Select assignee</option>
+                  {currentMembers.map((member) => (
+                    <option key={member.id} value={member.id}>{member.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <DatePicker
-                  value={newTask.dueDate ? new Date(newTask.dueDate) : undefined}
-                  onChange={(date) => setNewTask({ ...newTask, dueDate: date ? date.toISOString() : "" })}
+                  label="Due Date"
+                  value={newTask.dueDate}
+                  onChange={(date) => setNewTask({ ...newTask, dueDate: date })}
                 />
               </div>
               <div>
@@ -362,9 +372,6 @@ export default function TasksPage() {
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold" style={{ color: "#111827" }}>{selectedTask.title}</h2>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setEditingTask(selectedTask)} className="p-2 rounded-lg hover:bg-gray-100">
-                    <Pencil className="w-4 h-4" style={{ color: "#6b7280" }} />
-                  </button>
                   <button onClick={() => { deleteTask(selectedTask.id); setSelectedTask(null); }} className="p-2 rounded-lg hover:bg-red-50">
                     <Trash2 className="w-4 h-4" style={{ color: "#ef4444" }} />
                   </button>
@@ -381,9 +388,19 @@ export default function TasksPage() {
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <div>
                   <p className="text-sm font-medium mb-1" style={{ color: "#374151" }}>Status</p>
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-sm" style={{ background: `${STATUS_CONFIG[selectedTask.status].color}20`, color: STATUS_CONFIG[selectedTask.status].color }}>
-                    {STATUS_CONFIG[selectedTask.status].label}
-                  </span>
+                  <select
+                    value={selectedTask.status}
+                    onChange={(e) => {
+                      updateTask(selectedTask.id, { status: e.target.value as TaskStatus });
+                      setSelectedTask({ ...selectedTask, status: e.target.value as TaskStatus });
+                    }}
+                    className="px-3 py-1.5 rounded-lg border text-sm"
+                    style={{ borderColor: "#e5e7eb" }}
+                  >
+                    {(Object.keys(STATUS_CONFIG) as TaskStatus[]).map((status) => (
+                      <option key={status} value={status}>{STATUS_CONFIG[status].label}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <p className="text-sm font-medium mb-1" style={{ color: "#374151" }}>Priority</p>
@@ -401,7 +418,7 @@ export default function TasksPage() {
                     <div key={comment.id} className="p-3 rounded-lg" style={{ background: "#f9fafb" }}>
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-medium text-sm" style={{ color: "#111827" }}>
-                          {currentMembers.find((m) => m.id === comment.authorId)?.name || "Unknown"}
+                          {comment.authorName || "Unknown"}
                         </span>
                         <span className="text-xs" style={{ color: "#9ca3af" }}>
                           {new Date(comment.createdAt).toLocaleDateString()}
@@ -421,8 +438,8 @@ export default function TasksPage() {
                     style={{ borderColor: "#e5e7eb" }}
                     placeholder="Add a comment..."
                   />
-                  <button onClick={handleAddComment} className="p-2 rounded-xl" style={{ background: "#f59e0b" }}>
-                    <Send className="w-4 h-4 text-white" />
+                  <button onClick={handleAddComment} className="px-4 py-2 rounded-xl text-white" style={{ background: "#f59e0b" }}>
+                    Send
                   </button>
                 </div>
               </div>
