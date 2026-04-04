@@ -28,7 +28,7 @@ export default function AnalyticsPage() {
 
   // Calculate member stats with useMemo to ensure it updates when tasks/members change
   const memberStats = useMemo(() => {
-    return currentMembers.map((member) => {
+    const stats = currentMembers.map((member) => {
       const memberTasks = currentTasks.filter((t) => {
         const assignedToMember = t.assigneeId === member.id || (Array.isArray(t.assigneeIds) && t.assigneeIds.includes(member.id));
         return assignedToMember;
@@ -43,6 +43,11 @@ export default function AnalyticsPage() {
         recentAction: memberActivities[0]?.action || "No recent activity"
       };
     }).sort((a, b) => b.totalTasks - a.totalTasks);
+    
+    console.log("[v0] Tasks with assignees:", currentTasks.filter(t => t.assigneeId || t.assigneeIds?.length).map(t => ({ title: t.title, assigneeId: t.assigneeId, assigneeIds: t.assigneeIds, status: t.status })));
+    console.log("[v0] Member stats:", stats.map(m => ({ name: m.name, totalTasks: m.totalTasks, completedTasks: m.completedTasks })));
+    
+    return stats;
   }, [currentMembers, currentTasks, currentActivities]);
 
   const stats = [

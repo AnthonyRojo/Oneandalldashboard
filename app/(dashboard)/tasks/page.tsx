@@ -63,6 +63,7 @@ export default function TasksPage() {
   const [newTag, setNewTag] = useState("");
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showPriorityDropdown, setShowPriorityDropdown] = useState(false);
+  const [approvalFeedback, setApprovalFeedback] = useState<{ taskId: string; approved: boolean } | null>(null);
 
   // For task editing modal
   const [editForm, setEditForm] = useState({
