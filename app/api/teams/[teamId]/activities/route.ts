@@ -21,18 +21,31 @@ export async function GET(
 
     const { data: activities, error } = await supabase
       .from("activities")
-      .select(`
-        *,
-        user:user_id (id, name, email, avatar_url)
-      `)
+      .select("*")
       .eq("team_id", teamId)
       .order("created_at", { ascending: false })
       .limit(100);
 
     if (error) throw error;
 
+    // Get user profiles separately
+    const userIds = [...new Set((activities || []).map((a) => a.user_id).filter(Boolean))];
+    let profilesMap: Record<string, { name: string; email: string; avatar_url: string }> = {};
+    
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, name, email, avatar_url")
+        .in("id", userIds);
+      
+      profilesMap = (profiles || []).reduce((acc, p) => {
+        acc[p.id] = p;
+        return acc;
+      }, {} as Record<string, { name: string; email: string; avatar_url: string }>);
+    }
+
     const formatted = (activities || []).map((a: Record<string, unknown>) => {
-      const actUser = a.user as Record<string, unknown> | null;
+      const actUser = profilesMap[a.user_id as string];
       const metadata = a.metadata as Record<string, unknown> | null;
       return {
         id: a.id,

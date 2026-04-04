@@ -22,17 +22,30 @@ export async function GET(
 
     const { data: tasks, error } = await supabase
       .from("tasks")
-      .select(`
-        *,
-        assignee:assignee_id (id, name, email, avatar_url)
-      `)
+      .select("*")
       .eq("team_id", teamId)
       .order("created_at", { ascending: false });
 
     if (error) throw error;
 
+    // Get assignee info separately
+    const assigneeIds = [...new Set((tasks || []).map((t) => t.assignee_id).filter(Boolean))];
+    let profilesMap: Record<string, { name: string; email: string; avatar_url: string }> = {};
+    
+    if (assigneeIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, name, email, avatar_url")
+        .in("id", assigneeIds);
+      
+      profilesMap = (profiles || []).reduce((acc, p) => {
+        acc[p.id] = p;
+        return acc;
+      }, {} as Record<string, { name: string; email: string; avatar_url: string }>);
+    }
+
     const formatted = (tasks || []).map((t: Record<string, unknown>) => {
-      const assignee = t.assignee as Record<string, unknown> | null;
+      const assignee = profilesMap[t.assignee_id as string];
       return {
         id: t.id,
         teamId: t.team_id,

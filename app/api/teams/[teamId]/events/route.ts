@@ -63,15 +63,19 @@ export async function POST(
     const body = await request.json();
     const supabase = getSupabaseAdmin();
 
+    // Parse dates - handle various formats
+    const startTime = body.startTime || body.start || body.date;
+    const endTime = body.endTime || body.end || startTime;
+    
     const { data: event, error } = await supabase
       .from("events")
       .insert({
         team_id: teamId,
         title: body.title,
         description: body.description,
-        date: body.date,
-        start_time: body.startTime || body.start,
-        end_time: body.endTime || body.end,
+        date: body.date ? new Date(body.date).toISOString().split("T")[0] : (startTime ? new Date(startTime).toISOString().split("T")[0] : null),
+        start_time: startTime,
+        end_time: endTime,
         type: body.type || "Meeting",
         link: body.link,
         location: body.location,

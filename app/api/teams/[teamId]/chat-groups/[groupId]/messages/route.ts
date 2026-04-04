@@ -22,28 +22,41 @@ export async function GET(
 
     const { data: messages, error } = await supabase
       .from("messages")
-      .select(`
-        *,
-        sender:sender_id (id, name, email, avatar_url)
-      `)
+      .select("*")
       .eq("team_id", teamId)
-      .eq("chat_group_id", groupId)
+      .eq("group_id", groupId)
       .order("created_at", { ascending: true })
       .limit(200);
 
     if (error) throw error;
 
+    // Get sender profiles separately
+    const senderIds = [...new Set((messages || []).map((m) => m.sender_id).filter(Boolean))];
+    let profilesMap: Record<string, { name: string; email: string; avatar_url: string }> = {};
+    
+    if (senderIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, name, email, avatar_url")
+        .in("id", senderIds);
+      
+      profilesMap = (profiles || []).reduce((acc, p) => {
+        acc[p.id] = p;
+        return acc;
+      }, {} as Record<string, { name: string; email: string; avatar_url: string }>);
+    }
+
     const formatted = (messages || []).map((m: Record<string, unknown>) => {
-      const sender = m.sender as Record<string, unknown> | null;
+      const sender = profilesMap[m.sender_id as string];
       return {
         id: m.id,
         teamId: m.team_id,
-        groupId: m.chat_group_id,
+        groupId: m.group_id,
         authorId: m.sender_id,
-        authorName: sender?.name || "Unknown",
+        authorName: sender?.name || m.sender_name || "Unknown",
         content: m.content,
         createdAt: m.created_at,
-        editedAt: m.edited_at,
+        editedAt: m.updated_at,
       };
     });
 
@@ -81,8 +94,9 @@ export async function POST(
       .from("messages")
       .insert({
         team_id: teamId,
-        chat_group_id: groupId,
+        group_id: groupId,
         sender_id: user.id,
+        sender_name: profile?.name || "Unknown",
         content: content.trim(),
       })
       .select()
@@ -93,7 +107,7 @@ export async function POST(
     const formatted = {
       id: message.id,
       teamId: message.team_id,
-      groupId: message.chat_group_id,
+      groupId: message.group_id,
       authorId: message.sender_id,
       authorName: profile?.name || "Unknown",
       content: message.content,

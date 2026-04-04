@@ -24,30 +24,39 @@ export async function GET(
 
     const { data: members, error } = await supabase
       .from("team_members")
-      .select(`
-        id,
-        team_id,
-        user_id,
-        role,
-        joined_at,
-        profiles:user_id (id, name, email, avatar_url)
-      `)
+      .select("id, team_id, user_id, role, joined_at, status")
       .eq("team_id", teamId);
 
     if (error) throw error;
 
+    // Get profile info separately
+    const userIds = (members || []).map((m) => m.user_id);
+    let profilesMap: Record<string, { name: string; email: string; avatar_url: string }> = {};
+    
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, name, email, avatar_url")
+        .in("id", userIds);
+      
+      profilesMap = (profiles || []).reduce((acc, p) => {
+        acc[p.id] = p;
+        return acc;
+      }, {} as Record<string, { name: string; email: string; avatar_url: string }>);
+    }
+
     // Transform to expected format
     const formatted = (members || []).map((m: Record<string, unknown>) => {
-      const profiles = m.profiles as Record<string, unknown> | null;
+      const profile = profilesMap[m.user_id as string];
       return {
         id: m.user_id,
         odid: m.id,
         teamId: m.team_id,
-        name: profiles?.name || "Unknown",
-        email: profiles?.email || "",
-        avatar: profiles?.avatar_url || getInitials((profiles?.name as string) || "U"),
+        name: profile?.name || "Unknown",
+        email: profile?.email || "",
+        avatar: profile?.avatar_url || getInitials((profile?.name as string) || "U"),
         role: m.role === "owner" ? "Owner" : m.role === "admin" ? "Admin" : "Member",
-        status: "Available",
+        status: m.status || "Available",
       };
     });
 
