@@ -741,11 +741,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       
       let calculatedProgress = 0;
       let shouldUpdateProgress = false;
-      const targetProjectId = res.task?.projectId;
+      // Fallback target ID just in case
+      let targetProjectId = updates.projectId;
 
       // Update tasks and calculate new progress based on the freshest state
       setTasks((prev) => {
-        const updated = prev.map((t) => (t.id === id ? res.task : t));
+        const existingTask = prev.find(t => t.id === id);
+        targetProjectId = targetProjectId || res?.task?.projectId || existingTask?.projectId;
+        
+        // BUG FIX: Merge updates AT THE END so they always win
+        const updated = prev.map((t) => (
+          t.id === id ? { ...t, ...(res?.task || {}), ...updates } : t
+        ));
         
         if (updates.status !== undefined && targetProjectId) {
           shouldUpdateProgress = true;
