@@ -463,12 +463,28 @@ export default function CalendarPage() {
             </div>
             <div className="p-6 border-t flex justify-end gap-3" style={{ borderColor: "#e5e7eb" }}>
               <button onClick={() => setEditingEvent(null)} className="px-4 py-2 rounded-xl" style={{ background: "#f3f4f6" }}>Cancel</button>
-              <button onClick={async () => {
-                const startDateTime = `${editForm.date}T${editForm.startTime}:00`;
-                const endDateTime = `${editForm.date}T${editForm.endTime}:00`;
-                await updateEvent(editingEvent.id, { title: editForm.title, description: editForm.description, type: editForm.type, startTime: startDateTime, endTime: endDateTime, link: editForm.link });
-                setEditingEvent(null);
-              }} className="px-4 py-2 rounded-xl text-white" style={{ background: "#3b82f6" }}>Save Changes</button>
+              <button 
+                  onClick={async () => {
+                    const startDateTime = `${editForm.date}T${editForm.startTime}:00`;
+                    const endDateTime = `${editForm.date}T${editForm.endTime}:00`;
+                    
+                    await updateEvent(editingEvent.id, { 
+                      title: editForm.title, 
+                      description: editForm.description, 
+                      type: editForm.type, 
+                      date: editForm.date,
+                      startTime: startDateTime, 
+                      endTime: endDateTime, 
+                      link: editForm.link 
+                    });
+                    
+                    setEditingEvent(null);
+                  }} 
+                  className="px-4 py-2 rounded-xl text-white" 
+                  style={{ background: "#3b82f6" }}
+                >
+                  Save Changes
+                </button>
             </div>
           </div>
         </div>
