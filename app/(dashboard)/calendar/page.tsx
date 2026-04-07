@@ -53,9 +53,11 @@ export default function CalendarPage() {
   const calendarEnd = endOfWeek(monthEnd);
   const calendarDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
 
+  // Get today's events
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const todayEvents = currentEvents.filter((event) => event.date === todayStr);
 
+  // Get upcoming events (next 7 days, excluding today)
   const upcomingEvents = currentEvents
     .filter((event) => {
       const eventDate = new Date(event.date + "T12:00:00");
@@ -77,20 +79,17 @@ export default function CalendarPage() {
     let dateStr: any = newEvent.date;
     if (dateStr instanceof Date) {
       dateStr = format(dateStr, "yyyy-MM-dd");
-    } else if (typeof dateStr === "object" && dateStr !== null) {
-      dateStr = format(new Date(dateStr), "yyyy-MM-dd");
     }
     const startDateTime = `${dateStr}T${newEvent.startTime}:00`;
     const endDateTime = `${dateStr}T${newEvent.endTime}:00`;
+    
     await addEvent({
-      title: newEvent.title,
-      description: newEvent.description,
+      ...newEvent,
       date: dateStr,
       startTime: startDateTime,
       endTime: endDateTime,
-      type: newEvent.type,
-      link: newEvent.link || undefined,
     });
+    
     setShowCreateModal(false);
     setNewEvent({ title: "", description: "", type: "Meeting", date: "", startTime: "09:00", endTime: "10:00", link: "" });
   };
@@ -99,22 +98,13 @@ export default function CalendarPage() {
     const dateStr = format(newDate, "yyyy-MM-dd");
     const event = currentEvents.find(e => e.id === eventId);
     if (!event) return;
-    try {
-      const oldStartTime = event.startTime.includes('T') ? event.startTime.split('T')[1] : "09:00:00";
-      const oldEndTime = event.endTime.includes('T') ? event.endTime.split('T')[1] : "10:00:00";
-      await updateEvent(eventId, {
-        date: dateStr,
-        startTime: `${dateStr}T${oldStartTime}`,
-        endTime: `${dateStr}T${oldEndTime}`
-      });
-    } catch (error) {
-      console.error("Failed to move event:", error);
-    }
-  };
-
-  const handleDateClick = (date: Date) => {
-    setNewEvent(prev => ({ ...prev, date: format(date, "yyyy-MM-dd") }));
-    setShowCreateModal(true);
+    const oldStartTime = event.startTime.includes('T') ? event.startTime.split('T')[1] : "09:00:00";
+    const oldEndTime = event.endTime.includes('T') ? event.endTime.split('T')[1] : "10:00:00";
+    await updateEvent(eventId, {
+      date: dateStr,
+      startTime: `${dateStr}T${oldStartTime}`,
+      endTime: `${dateStr}T${oldEndTime}`
+    });
   };
 
   const formatTime = (time: string) => {
@@ -123,8 +113,7 @@ export default function CalendarPage() {
       const timeStr = time.includes('T') ? time.split('T')[1].substring(0, 5) : time;
       const [h, m] = timeStr.split(":");
       const hour = parseInt(h);
-      const ampm = hour >= 12 ? "PM" : "AM";
-      return `${hour % 12 || 12}:${m} ${ampm}`;
+      return `${hour % 12 || 12}:${m} ${hour >= 12 ? "PM" : "AM"}`;
     } catch (e) { return time; }
   };
 
@@ -132,10 +121,7 @@ export default function CalendarPage() {
     if (!dateStr) return "";
     const d = new Date(dateStr + "T12:00:00");
     const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
     if (d.toDateString() === today.toDateString()) return "Today";
-    if (d.toDateString() === tomorrow.toDateString()) return "Tomorrow";
     return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
   };
 
@@ -146,14 +132,14 @@ export default function CalendarPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-semibold" style={{ color: "#111827" }}>Calendar</h1>
-            <p style={{ color: "#6b7280", fontSize: "0.875rem" }}>{currentEvents.length} event{currentEvents.length !== 1 ? "s" : ""}</p>
+            <p style={{ color: "#6b7280", fontSize: "0.875rem" }}>{currentEvents.length} events</p>
           </div>
           <button onClick={() => setShowCreateModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl font-medium" style={{ background: "#f59e0b", color: "white" }}>
             <Plus className="w-4 h-4" /> New Event
           </button>
         </div>
 
-        {/* Top Panels */}
+        {/* Today and Upcoming Panels */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: "#f59e0b" }}>
             <div className="px-5 py-4 border-b flex items-center gap-2" style={{ borderColor: "#e5e7eb", background: "#fffbeb" }}>
@@ -161,17 +147,20 @@ export default function CalendarPage() {
               <h3 style={{ color: "#111827", fontWeight: 600 }}>Today</h3>
             </div>
             <div className="divide-y max-h-[250px] overflow-y-auto">
-              {todayEvents.length > 0 ? todayEvents.map((event) => (
-                <button key={event.id} onClick={() => setSelectedEvent(event)} className="w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${EVENT_COLORS[event.type]}20` }}>
-                    {(() => { const Icon = EVENT_ICONS[event.type] || Clock; return <Icon className="w-4 h-4" style={{ color: EVENT_COLORS[event.type] }} />; })()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="truncate font-medium" style={{ color: "#111827", fontSize: "0.875rem" }}>{event.title}</p>
-                    <p style={{ color: "#6b7280", fontSize: "0.75rem" }}>{formatTime(event.startTime)} - {formatTime(event.endTime)}</p>
-                  </div>
-                </button>
-              )) : <div className="px-5 py-8 text-center text-gray-400 text-sm">No events today</div>}
+              {todayEvents.length > 0 ? todayEvents.map((event) => {
+                const Icon = EVENT_ICONS[event.type] || Clock;
+                return (
+                  <button key={event.id} onClick={() => setSelectedEvent(event)} className="w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${EVENT_COLORS[event.type]}20` }}>
+                      <Icon className="w-4 h-4" style={{ color: EVENT_COLORS[event.type] }} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="truncate font-medium text-sm text-gray-900">{event.title}</p>
+                      <p className="text-xs text-gray-500">{formatTime(event.startTime)} - {formatTime(event.endTime)}</p>
+                    </div>
+                  </button>
+                );
+              }) : <div className="p-5 text-center text-sm text-gray-400">No events today</div>}
             </div>
           </div>
 
@@ -181,17 +170,20 @@ export default function CalendarPage() {
               <h3 style={{ color: "#111827", fontWeight: 600 }}>Upcoming</h3>
             </div>
             <div className="divide-y max-h-[250px] overflow-y-auto">
-              {upcomingEvents.length > 0 ? upcomingEvents.map((event) => (
-                <button key={event.id} onClick={() => setSelectedEvent(event)} className="w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${EVENT_COLORS[event.type]}20` }}>
-                    {(() => { const Icon = EVENT_ICONS[event.type] || Clock; return <Icon className="w-4 h-4" style={{ color: EVENT_COLORS[event.type] }} />; })()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="truncate font-medium" style={{ color: "#111827", fontSize: "0.875rem" }}>{event.title}</p>
-                    <p style={{ color: "#6b7280", fontSize: "0.75rem" }}>{formatEventDate(event.date)} • {formatTime(event.startTime)}</p>
-                  </div>
-                </button>
-              )) : <div className="px-5 py-8 text-center text-gray-400 text-sm">No upcoming events</div>}
+              {upcomingEvents.length > 0 ? upcomingEvents.map((event) => {
+                const Icon = EVENT_ICONS[event.type] || Clock;
+                return (
+                  <button key={event.id} onClick={() => setSelectedEvent(event)} className="w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${EVENT_COLORS[event.type]}20` }}>
+                      <Icon className="w-4 h-4" style={{ color: EVENT_COLORS[event.type] }} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="truncate font-medium text-sm text-gray-900">{event.title}</p>
+                      <p className="text-xs text-gray-500">{formatEventDate(event.date)} • {formatTime(event.startTime)}</p>
+                    </div>
+                  </button>
+                );
+              }) : <div className="p-5 text-center text-sm text-gray-400">No upcoming events</div>}
             </div>
           </div>
         </div>
@@ -210,12 +202,12 @@ export default function CalendarPage() {
           </div>
           <div className="grid grid-cols-7">
             {calendarDays.map((day, i) => (
-              <CalendarDay key={i} day={day} events={getEventsForDay(day)} isCurrentMonth={isSameMonth(day, currentMonth)} isToday={isToday(day)} onEventClick={setSelectedEvent} onEventDrop={handleMoveEvent} onDateClick={handleDateClick} />
+              <CalendarDay key={i} day={day} events={getEventsForDay(day)} isCurrentMonth={isSameMonth(day, currentMonth)} isToday={isToday(day)} onEventClick={setSelectedEvent} onEventDrop={handleMoveEvent} onDateClick={(d: Date) => { setNewEvent(p => ({...p, date: format(d, "yyyy-MM-dd")})); setShowCreateModal(true); }} />
             ))}
           </div>
         </div>
 
-        {/* Create Event Modal */}
+        {/* Create Modal */}
         {showCreateModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl w-full max-w-lg p-6 space-y-4">
@@ -223,23 +215,38 @@ export default function CalendarPage() {
                 <h2 className="text-lg font-semibold">Create Event</h2>
                 <button onClick={() => setShowCreateModal(false)}><X className="w-5 h-5" /></button>
               </div>
-              <input type="text" placeholder="Title" value={newEvent.title} onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })} className="w-full px-4 py-2 border rounded-xl" />
+              <div>
+                <label className="block text-sm font-medium mb-1">Title</label>
+                <input type="text" value={newEvent.title} onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })} className="w-full px-4 py-2 border rounded-xl" placeholder="Event title" />
+              </div>
               <DatePicker label="Date" value={newEvent.date ? new Date(newEvent.date) : undefined} onChange={(val: any) => setNewEvent({ ...newEvent, date: val instanceof Date ? format(val, "yyyy-MM-dd") : val })} />
               <div className="grid grid-cols-2 gap-4">
-                <input type="time" value={newEvent.startTime} onChange={(e) => setNewEvent({ ...newEvent, startTime: e.target.value })} className="border p-2 rounded-xl" />
-                <input type="time" value={newEvent.endTime} onChange={(e) => setNewEvent({ ...newEvent, endTime: e.target.value })} className="border p-2 rounded-xl" />
+                <div>
+                  <label className="block text-sm font-medium mb-1">Start Time</label>
+                  <input type="time" value={newEvent.startTime} onChange={(e) => setNewEvent({ ...newEvent, startTime: e.target.value })} className="w-full border p-2 rounded-xl" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">End Time</label>
+                  <input type="time" value={newEvent.endTime} onChange={(e) => setNewEvent({ ...newEvent, endTime: e.target.value })} className="w-full border p-2 rounded-xl" />
+                </div>
               </div>
-              <input type="url" placeholder="Meeting Link (optional)" value={newEvent.link} onChange={(e) => setNewEvent({ ...newEvent, link: e.target.value })} className="w-full px-4 py-2 border rounded-xl" />
-              <textarea placeholder="Description" value={newEvent.description} onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })} className="w-full px-4 py-2 border rounded-xl" rows={3} />
-              <div className="flex justify-end gap-3 pt-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Link (optional)</label>
+                <input type="url" value={newEvent.link} onChange={(e) => setNewEvent({ ...newEvent, link: e.target.value })} className="w-full px-4 py-2 border rounded-xl" placeholder="https://..." />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Description</label>
+                <textarea value={newEvent.description} onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })} className="w-full px-4 py-2 border rounded-xl" rows={3} placeholder="Description..." />
+              </div>
+              <div className="flex justify-end gap-3 pt-4 border-t">
                 <button onClick={() => setShowCreateModal(false)} className="px-4 py-2 bg-gray-100 rounded-xl">Cancel</button>
-                <button onClick={handleCreateEvent} className="px-4 py-2 bg-amber-500 text-white rounded-xl">Create</button>
+                <button onClick={handleCreateEvent} className="px-4 py-2 bg-amber-500 text-white rounded-xl">Create Event</button>
               </div>
             </div>
           </div>
         )}
 
-        {/* Selected Event Modal (Fixed Syntax) */}
+        {/* Selected Event Preview Modal */}
         {selectedEvent && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden">
@@ -249,13 +256,12 @@ export default function CalendarPage() {
                     <div className="w-3 h-3 rounded-full" style={{ background: EVENT_COLORS[selectedEvent.type] }}></div>
                     <span className="text-sm font-medium text-gray-500">{selectedEvent.type}</span>
                   </div>
-                  <h2 className="text-lg font-semibold text-gray-900">{selectedEvent.title}</h2>
+                  <h2 className="text-lg font-semibold">{selectedEvent.title}</h2>
                 </div>
                 <button onClick={() => setSelectedEvent(null)}><X className="w-5 h-5 text-gray-400" /></button>
               </div>
-              
               <div className="p-6 space-y-4">
-                {selectedEvent.description && <p className="text-gray-500">{selectedEvent.description}</p>}
+                {selectedEvent.description && <p className="text-gray-600 whitespace-pre-wrap">{selectedEvent.description}</p>}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-gray-700">
                     <CalendarDays className="w-4 h-4 text-gray-400" />
@@ -265,15 +271,13 @@ export default function CalendarPage() {
                     <Clock className="w-4 h-4 text-gray-400" />
                     <span>{formatTime(selectedEvent.startTime)} - {formatTime(selectedEvent.endTime)}</span>
                   </div>
-                  
                   {selectedEvent.link && (
-                    <div className="flex items-center gap-2">
-                      <Video className="w-4 h-4 text-gray-400" />
+                    <div className="flex items-start gap-2 max-w-full">
+                      <Video className="w-4 h-4 text-gray-400 mt-1 flex-shrink-0" />
                       <a 
                         href={selectedEvent.link.startsWith('http') ? selectedEvent.link : `https://${selectedEvent.link}`} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        className="text-blue-600 underline hover:text-blue-800"
+                        target="_blank" rel="noopener noreferrer" 
+                        className="text-blue-600 underline break-all hover:text-blue-800"
                       >
                         {selectedEvent.link}
                       </a>
@@ -281,7 +285,6 @@ export default function CalendarPage() {
                   )}
                 </div>
               </div>
-
               <div className="p-6 border-t flex justify-end gap-3 bg-gray-50">
                 <button onClick={() => setSelectedEvent(null)} className="px-4 py-2 bg-white border rounded-xl">Close</button>
                 <button 
@@ -302,10 +305,7 @@ export default function CalendarPage() {
                 >
                   <Pencil className="w-4 h-4" /> Edit
                 </button>
-                <button 
-                  onClick={() => { deleteEvent(selectedEvent.id); setSelectedEvent(null); }} 
-                  className="px-4 py-2 bg-red-500 text-white rounded-xl flex items-center gap-2"
-                >
+                <button onClick={() => { deleteEvent(selectedEvent.id); setSelectedEvent(null); }} className="px-4 py-2 bg-red-500 text-white rounded-xl flex items-center gap-2">
                   <Trash2 className="w-4 h-4" /> Delete
                 </button>
               </div>
@@ -321,19 +321,36 @@ export default function CalendarPage() {
                 <h2 className="text-lg font-semibold">Edit Event</h2>
                 <button onClick={() => setEditingEvent(null)}><X className="w-5 h-5" /></button>
               </div>
-              <input type="text" value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} className="w-full px-4 py-2 border rounded-xl" />
-              <div className="grid grid-cols-2 gap-4">
-                <input type="time" value={editForm.startTime} onChange={(e) => setEditForm({ ...editForm, startTime: e.target.value })} className="border p-2 rounded-xl" />
-                <input type="time" value={editForm.endTime} onChange={(e) => setEditForm({ ...editForm, endTime: e.target.value })} className="border p-2 rounded-xl" />
+              <div>
+                <label className="block text-sm font-medium mb-1">Title</label>
+                <input type="text" value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} className="w-full px-4 py-2 border rounded-xl" />
               </div>
-              <input type="url" placeholder="Meeting Link" value={editForm.link} onChange={(e) => setEditForm({ ...editForm, link: e.target.value })} className="w-full px-4 py-2 border rounded-xl" />
-              <div className="flex justify-end gap-3 pt-4">
+              <DatePicker label="Date" value={editForm.date ? new Date(editForm.date) : undefined} onChange={(val: any) => setEditForm({ ...editForm, date: val instanceof Date ? format(val, "yyyy-MM-dd") : val })} />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Start Time</label>
+                  <input type="time" value={editForm.startTime} onChange={(e) => setEditForm({ ...editForm, startTime: e.target.value })} className="w-full border p-2 rounded-xl" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">End Time</label>
+                  <input type="time" value={editForm.endTime} onChange={(e) => setEditForm({ ...editForm, endTime: e.target.value })} className="w-full border p-2 rounded-xl" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Link</label>
+                <input type="url" value={editForm.link} onChange={(e) => setEditForm({ ...editForm, link: e.target.value })} className="w-full px-4 py-2 border rounded-xl" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Description</label>
+                <textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} className="w-full px-4 py-2 border rounded-xl" rows={3} />
+              </div>
+              <div className="flex justify-end gap-3 pt-4 border-t">
                 <button onClick={() => setEditingEvent(null)} className="px-4 py-2 bg-gray-100 rounded-xl">Cancel</button>
                 <button 
                   onClick={async () => {
-                    const startDateTime = `${editForm.date}T${editForm.startTime}:00`;
-                    const endDateTime = `${editForm.date}T${editForm.endTime}:00`;
-                    await updateEvent(editingEvent.id, { ...editForm, startTime: startDateTime, endTime: endDateTime });
+                    const startT = `${editForm.date}T${editForm.startTime}:00`;
+                    const endT = `${editForm.date}T${editForm.endTime}:00`;
+                    await updateEvent(editingEvent.id, { ...editForm, startTime: startT, endTime: endT });
                     setEditingEvent(null);
                   }} 
                   className="px-4 py-2 bg-blue-600 text-white rounded-xl"
@@ -349,22 +366,22 @@ export default function CalendarPage() {
   );
 }
 
-function CalendarDay({ day, events, isCurrentMonth, isToday: isTodayDay, onEventClick, onEventDrop, onDateClick }: { day: Date; events: CalendarEvent[]; isCurrentMonth: boolean; isToday: boolean; onEventClick: (event: CalendarEvent) => void; onEventDrop: (eventId: string, newDate: Date) => void; onDateClick: (date: Date) => void; }) {
-  const [{ isOver }, drop] = useDrop(() => ({ accept: "event", drop: (item: { id: string }) => onEventDrop(item.id, day), collect: (monitor) => ({ isOver: monitor.isOver() }) }), [day, onEventDrop]);
+function CalendarDay({ day, events, isCurrentMonth, isToday: isTodayDay, onEventClick, onEventDrop, onDateClick }: any) {
+  const [{ isOver }, drop] = useDrop(() => ({ accept: "event", drop: (item: any) => onEventDrop(item.id, day), collect: (m) => ({ isOver: m.isOver() }) }), [day]);
   return (
-    <div ref={drop as any} onClick={() => onDateClick(day)} className="min-h-[100px] p-2 border-b border-r hover:bg-blue-50 cursor-pointer" style={{ background: isOver ? "#fef3c7" : isTodayDay ? "#fffbeb" : "transparent", opacity: isCurrentMonth ? 1 : 0.5 }}>
+    <div ref={drop as any} onClick={() => onDateClick(day)} className="min-h-[100px] p-2 border-b border-r hover:bg-blue-50 cursor-pointer" style={{ borderColor: "#e5e7eb", background: isOver ? "#fef3c7" : isTodayDay ? "#fffbeb" : "transparent", opacity: isCurrentMonth ? 1 : 0.5 }}>
       <div className={`text-sm mb-1 ${isTodayDay ? "font-semibold text-amber-500" : "text-gray-700"}`}>{format(day, "d")}</div>
       <div className="space-y-1">
-        {events.slice(0, 3).map((event) => <MemoizedDraggableEvent key={event.id} event={event} onClick={(e) => { e.stopPropagation(); onEventClick(event); }} />)}
+        {events.slice(0, 3).map((event: any) => <MemoizedDraggableEvent key={event.id} event={event} onClick={(e: any) => { e.stopPropagation(); onEventClick(event); }} />)}
+        {events.length > 3 && <div className="text-xs text-gray-400">+{events.length - 3} more</div>}
       </div>
     </div>
   );
 }
 
-function DraggableEvent({ event, onClick }: { event: CalendarEvent; onClick: (e: any) => void }) {
-  const [{ isDragging }, drag] = useDrag(() => ({ type: "event", item: { id: event.id }, collect: (monitor) => ({ isDragging: monitor.isDragging() }) }), [event.id]);
-  const color = EVENT_COLORS[event.type] || "#6b7280";
+function DraggableEvent({ event, onClick }: any) {
+  const [{ isDragging }, drag] = useDrag(() => ({ type: "event", item: { id: event.id }, collect: (m) => ({ isDragging: m.isDragging() }) }), [event.id]);
+  const color = EVENT_COLORS[event.type as EventType] || "#6b7280";
   return <button ref={drag as any} onClick={onClick} className="w-full text-left px-2 py-1 rounded text-xs truncate border-l-4" style={{ background: `${color}15`, color: color, borderColor: color, opacity: isDragging ? 0.5 : 1 }}>{event.title}</button>;
 }
-
 const MemoizedDraggableEvent = memo(DraggableEvent);
