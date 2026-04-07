@@ -31,6 +31,7 @@ export async function PUT(
     if (updates.type !== undefined) updateData.type = updates.type;
     if (updates.location !== undefined) updateData.location = updates.location;
     if (updates.color !== undefined) updateData.color = updates.color;
+    if (updates.link !== undefined) updateData.link = updates.link;
 
     const { data: event, error } = await supabase
       .from("events")
@@ -53,6 +54,7 @@ export async function PUT(
       type: event.type,
       location: event.location,
       color: event.color,
+      link: event.link,
       createdAt: event.created_at,
     };
 
