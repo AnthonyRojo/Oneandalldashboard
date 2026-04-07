@@ -53,11 +53,9 @@ export default function CalendarPage() {
   const calendarEnd = endOfWeek(monthEnd);
   const calendarDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
 
-  // Get today's events
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const todayEvents = currentEvents.filter((event) => event.date === todayStr);
 
-  // Get upcoming events (next 7 days, excluding today)
   const upcomingEvents = currentEvents
     .filter((event) => {
       const eventDate = new Date(event.date + "T12:00:00");
@@ -76,20 +74,14 @@ export default function CalendarPage() {
 
   const handleCreateEvent = async () => {
     if (!newEvent.title || !newEvent.date || !newEvent.startTime) return;
-    
-    // Ensure date is in YYYY-MM-DD format
-    // Ensure date is in YYYY-MM-DD format
     let dateStr: any = newEvent.date;
     if (dateStr instanceof Date) {
       dateStr = format(dateStr, "yyyy-MM-dd");
     } else if (typeof dateStr === "object" && dateStr !== null) {
       dateStr = format(new Date(dateStr), "yyyy-MM-dd");
     }
-    
-    // Combine date with time to create full ISO timestamps
     const startDateTime = `${dateStr}T${newEvent.startTime}:00`;
     const endDateTime = `${dateStr}T${newEvent.endTime}:00`;
-    
     await addEvent({
       title: newEvent.title,
       description: newEvent.description,
@@ -99,49 +91,17 @@ export default function CalendarPage() {
       type: newEvent.type,
       link: newEvent.link || undefined,
     });
-    
     setShowCreateModal(false);
     setNewEvent({ title: "", description: "", type: "Meeting", date: "", startTime: "09:00", endTime: "10:00", link: "" });
-  };
-
-  const openEditModal = (event: CalendarEvent) => {
-    setEditingEvent(event);
-    setEditForm({
-      title: event.title,
-      description: event.description || "",
-      type: event.type,
-      date: event.date,
-      startTime: event.startTime,
-      endTime: event.endTime,
-      link: event.link || "",
-    });
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editingEvent) return;
-    await updateEvent(editingEvent.id, {
-      title: editForm.title,
-      description: editForm.description,
-      type: editForm.type,
-      date: editForm.date,
-      startTime: editForm.startTime,
-      endTime: editForm.endTime,
-      link: editForm.link || undefined,
-    });
-    setEditingEvent(null);
-    setSelectedEvent(null);
   };
 
   const handleMoveEvent = async (eventId: string, newDate: Date) => {
     const dateStr = format(newDate, "yyyy-MM-dd");
     const event = currentEvents.find(e => e.id === eventId);
     if (!event) return;
-
     try {
-      // Extract just the time part if it's an ISO string
       const oldStartTime = event.startTime.includes('T') ? event.startTime.split('T')[1] : "09:00:00";
       const oldEndTime = event.endTime.includes('T') ? event.endTime.split('T')[1] : "10:00:00";
-
       await updateEvent(eventId, {
         date: dateStr,
         startTime: `${dateStr}T${oldStartTime}`,
@@ -153,10 +113,7 @@ export default function CalendarPage() {
   };
 
   const handleDateClick = (date: Date) => {
-    setNewEvent(prev => ({
-      ...prev,
-      date: format(date, "yyyy-MM-dd")
-    }));
+    setNewEvent(prev => ({ ...prev, date: format(date, "yyyy-MM-dd") }));
     setShowCreateModal(true);
   };
 
@@ -168,9 +125,7 @@ export default function CalendarPage() {
       const hour = parseInt(h);
       const ampm = hour >= 12 ? "PM" : "AM";
       return `${hour % 12 || 12}:${m} ${ampm}`;
-    } catch (e) {
-      return time;
-    }
+    } catch (e) { return time; }
   };
 
   const formatEventDate = (dateStr: string) => {
@@ -198,105 +153,60 @@ export default function CalendarPage() {
           </button>
         </div>
 
-        {/* Today and Upcoming Events Sections */}
+        {/* Top Panels */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Today's Events */}
           <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: "#f59e0b" }}>
             <div className="px-5 py-4 border-b flex items-center gap-2" style={{ borderColor: "#e5e7eb", background: "#fffbeb" }}>
               <CalendarDays className="w-5 h-5" style={{ color: "#f59e0b" }} />
               <h3 style={{ color: "#111827", fontWeight: 600 }}>Today</h3>
-              <span className="ml-auto px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: "#f59e0b", color: "white" }}>
-                {todayEvents.length}
-              </span>
             </div>
-            <div className="divide-y max-h-[250px] overflow-y-auto" style={{ borderColor: "#f0f0ea" }}>
-              {todayEvents.length > 0 ? todayEvents.map((event) => {
-                const Icon = EVENT_ICONS[event.type] || Clock;
-                return (
-                  <button 
-                    key={event.id} 
-                    onClick={() => setSelectedEvent(event)}
-                    className="w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${EVENT_COLORS[event.type]}20` }}>
-                      <Icon className="w-4 h-4" style={{ color: EVENT_COLORS[event.type] }} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="truncate font-medium" style={{ color: "#111827", fontSize: "0.875rem" }}>{event.title}</p>
-                      <p style={{ color: "#6b7280", fontSize: "0.75rem" }}>{formatTime(event.startTime)} - {formatTime(event.endTime)}</p>
-                    </div>
-                  </button>
-                );
-              }) : (
-                <div className="px-5 py-8 text-center">
-                  <p style={{ color: "#9ca3af", fontSize: "0.875rem" }}>No events today</p>
-                </div>
-              )}
+            <div className="divide-y max-h-[250px] overflow-y-auto">
+              {todayEvents.length > 0 ? todayEvents.map((event) => (
+                <button key={event.id} onClick={() => setSelectedEvent(event)} className="w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${EVENT_COLORS[event.type]}20` }}>
+                    {(() => { const Icon = EVENT_ICONS[event.type] || Clock; return <Icon className="w-4 h-4" style={{ color: EVENT_COLORS[event.type] }} />; })()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate font-medium" style={{ color: "#111827", fontSize: "0.875rem" }}>{event.title}</p>
+                    <p style={{ color: "#6b7280", fontSize: "0.75rem" }}>{formatTime(event.startTime)} - {formatTime(event.endTime)}</p>
+                  </div>
+                </button>
+              )) : <div className="px-5 py-8 text-center text-gray-400 text-sm">No events today</div>}
             </div>
           </div>
 
-          {/* Upcoming Events */}
           <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: "#e5e7eb" }}>
-            <div className="px-5 py-4 border-b flex items-center gap-2" style={{ borderColor: "#e5e7eb" }}>
+            <div className="px-5 py-4 border-b flex items-center gap-2">
               <Clock className="w-5 h-5" style={{ color: "#3b82f6" }} />
-              <h3 style={{ color: "#111827", fontWeight: 600 }}>Upcoming (Next 7 Days)</h3>
-              <span className="ml-auto px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: "#3b82f6", color: "white" }}>
-                {upcomingEvents.length}
-              </span>
+              <h3 style={{ color: "#111827", fontWeight: 600 }}>Upcoming</h3>
             </div>
-            <div className="divide-y max-h-[250px] overflow-y-auto" style={{ borderColor: "#f0f0ea" }}>
-              {upcomingEvents.length > 0 ? upcomingEvents.map((event) => {
-                const Icon = EVENT_ICONS[event.type] || Clock;
-                return (
-                  <button 
-                    key={event.id} 
-                    onClick={() => setSelectedEvent(event)}
-                    className="w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${EVENT_COLORS[event.type]}20` }}>
-                      <Icon className="w-4 h-4" style={{ color: EVENT_COLORS[event.type] }} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="truncate font-medium" style={{ color: "#111827", fontSize: "0.875rem" }}>{event.title}</p>
-                      <p style={{ color: "#6b7280", fontSize: "0.75rem" }}>
-                        {formatEventDate(event.date)} • {formatTime(event.startTime)}
-                      </p>
-                    </div>
-                  </button>
-                );
-              }) : (
-                <div className="px-5 py-8 text-center">
-                  <p style={{ color: "#9ca3af", fontSize: "0.875rem" }}>No upcoming events</p>
-                </div>
-              )}
+            <div className="divide-y max-h-[250px] overflow-y-auto">
+              {upcomingEvents.length > 0 ? upcomingEvents.map((event) => (
+                <button key={event.id} onClick={() => setSelectedEvent(event)} className="w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${EVENT_COLORS[event.type]}20` }}>
+                    {(() => { const Icon = EVENT_ICONS[event.type] || Clock; return <Icon className="w-4 h-4" style={{ color: EVENT_COLORS[event.type] }} />; })()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate font-medium" style={{ color: "#111827", fontSize: "0.875rem" }}>{event.title}</p>
+                    <p style={{ color: "#6b7280", fontSize: "0.75rem" }}>{formatEventDate(event.date)} • {formatTime(event.startTime)}</p>
+                  </div>
+                </button>
+              )) : <div className="px-5 py-8 text-center text-gray-400 text-sm">No upcoming events</div>}
             </div>
           </div>
         </div>
 
         {/* Calendar Grid */}
         <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: "#e5e7eb" }}>
-          <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "#e5e7eb" }}>
+          <div className="flex items-center justify-between px-6 py-4 border-b">
             <div className="flex items-center gap-4">
-              <button onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} className="p-2 rounded-xl hover:bg-gray-100">
-                <ChevronLeft className="w-5 h-5" style={{ color: "#6b7280" }} />
-              </button>
-              <h2 className="text-lg font-semibold" style={{ color: "#111827" }}>{format(currentMonth, "MMMM yyyy")}</h2>
-              <button onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} className="p-2 rounded-xl hover:bg-gray-100">
-                <ChevronRight className="w-5 h-5" style={{ color: "#6b7280" }} />
-              </button>
+              <button onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} className="p-2 rounded-xl hover:bg-gray-100"><ChevronLeft className="w-5 h-5" /></button>
+              <h2 className="text-lg font-semibold">{format(currentMonth, "MMMM yyyy")}</h2>
+              <button onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} className="p-2 rounded-xl hover:bg-gray-100"><ChevronRight className="w-5 h-5" /></button>
             </div>
-            <button 
-              onClick={() => setCurrentMonth(new Date())}
-              className="px-3 py-1.5 rounded-lg text-sm font-medium"
-              style={{ background: "#f3f4f6", color: "#374151" }}
-            >
-              Today
-            </button>
           </div>
-          <div className="grid grid-cols-7 border-b" style={{ borderColor: "#e5e7eb" }}>
-            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-              <div key={day} className="p-3 text-center text-sm font-medium" style={{ color: "#6b7280" }}>{day}</div>
-            ))}
+          <div className="grid grid-cols-7 border-b text-center text-sm font-medium text-gray-500">
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(d => <div key={d} className="p-3">{d}</div>)}
           </div>
           <div className="grid grid-cols-7">
             {calendarDays.map((day, i) => (
@@ -308,216 +218,144 @@ export default function CalendarPage() {
         {/* Create Event Modal */}
         {showCreateModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-              <div className="p-6 border-b flex items-center justify-between" style={{ borderColor: "#e5e7eb" }}>
-                <h2 className="text-lg font-semibold" style={{ color: "#111827" }}>Create Event</h2>
-                <button onClick={() => setShowCreateModal(false)} className="p-1 rounded-lg hover:bg-gray-100"><X className="w-5 h-5" style={{ color: "#6b7280" }} /></button>
+            <div className="bg-white rounded-2xl w-full max-w-lg p-6 space-y-4">
+              <div className="flex justify-between items-center border-b pb-4">
+                <h2 className="text-lg font-semibold">Create Event</h2>
+                <button onClick={() => setShowCreateModal(false)}><X className="w-5 h-5" /></button>
               </div>
-              <div className="p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Title</label>
-                  <input type="text" value={newEvent.title} onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })} className="w-full px-4 py-2 rounded-xl border" style={{ borderColor: "#e5e7eb" }} placeholder="Event title" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Type</label>
-                  <select value={newEvent.type} onChange={(e) => setNewEvent({ ...newEvent, type: e.target.value as EventType })} className="w-full px-4 py-2 rounded-xl border" style={{ borderColor: "#e5e7eb" }}>
-                    <option value="Meeting">Meeting</option>
-                    <option value="Review">Review</option>
-                    <option value="Post">Post</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-                <div>
-                  <DatePicker 
-                    label="Date" 
-                    value={newEvent.date ? new Date(newEvent.date) : undefined} 
-                    onChange={(val: any) => {
-                      const dateStr = val instanceof Date ? format(val, "yyyy-MM-dd") : (typeof val === "string" ? val : "");
-                      setNewEvent({ ...newEvent, date: dateStr });
-                    }} 
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Start Time</label>
-                    <input type="time" value={newEvent.startTime} onChange={(e) => setNewEvent({ ...newEvent, startTime: e.target.value })} className="w-full px-4 py-2 rounded-xl border" style={{ borderColor: "#e5e7eb" }} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>End Time</label>
-                    <input type="time" value={newEvent.endTime} onChange={(e) => setNewEvent({ ...newEvent, endTime: e.target.value })} className="w-full px-4 py-2 rounded-xl border" style={{ borderColor: "#e5e7eb" }} />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Link (optional)</label>
-                  <input type="url" value={newEvent.link} onChange={(e) => setNewEvent({ ...newEvent, link: e.target.value })} className="w-full px-4 py-2 rounded-xl border" style={{ borderColor: "#e5e7eb" }} placeholder="https://meet.google.com/..." />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Description</label>
-                  <textarea value={newEvent.description} onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })} className="w-full px-4 py-2 rounded-xl border resize-none" style={{ borderColor: "#e5e7eb" }} rows={3} placeholder="Event description" />
-                </div>
+              <input type="text" placeholder="Title" value={newEvent.title} onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })} className="w-full px-4 py-2 border rounded-xl" />
+              <DatePicker label="Date" value={newEvent.date ? new Date(newEvent.date) : undefined} onChange={(val: any) => setNewEvent({ ...newEvent, date: val instanceof Date ? format(val, "yyyy-MM-dd") : val })} />
+              <div className="grid grid-cols-2 gap-4">
+                <input type="time" value={newEvent.startTime} onChange={(e) => setNewEvent({ ...newEvent, startTime: e.target.value })} className="border p-2 rounded-xl" />
+                <input type="time" value={newEvent.endTime} onChange={(e) => setNewEvent({ ...newEvent, endTime: e.target.value })} className="border p-2 rounded-xl" />
               </div>
-              <div className="p-6 border-t flex justify-end gap-3" style={{ borderColor: "#e5e7eb" }}>
-                <button onClick={() => setShowCreateModal(false)} className="px-4 py-2 rounded-xl" style={{ background: "#f3f4f6" }}>Cancel</button>
-                <button onClick={handleCreateEvent} className="px-4 py-2 rounded-xl text-white" style={{ background: "#f59e0b" }}>Create Event</button>
+              <input type="url" placeholder="Meeting Link (optional)" value={newEvent.link} onChange={(e) => setNewEvent({ ...newEvent, link: e.target.value })} className="w-full px-4 py-2 border rounded-xl" />
+              <textarea placeholder="Description" value={newEvent.description} onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })} className="w-full px-4 py-2 border rounded-xl" rows={3} />
+              <div className="flex justify-end gap-3 pt-4">
+                <button onClick={() => setShowCreateModal(false)} className="px-4 py-2 bg-gray-100 rounded-xl">Cancel</button>
+                <button onClick={handleCreateEvent} className="px-4 py-2 bg-amber-500 text-white rounded-xl">Create</button>
               </div>
             </div>
           </div>
         )}
 
-      {/* Selected Event Modal */}
-      {selectedEvent && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b flex items-center justify-between" style={{ borderColor: "#e5e7eb" }}>
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="w-3 h-3 rounded-full" style={{ background: EVENT_COLORS[selectedEvent.type] }}></div>
-                  <span className="text-sm font-medium" style={{ color: "#6b7280" }}>{selectedEvent.type}</span>
-                </div>
-                <h2 className="text-lg font-semibold" style={{ color: "#111827" }}>{selectedEvent.title}</h2>
-              </div>
-              <button onClick={() => setSelectedEvent(null)} className="p-1 rounded-lg hover:bg-gray-100"><X className="w-5 h-5" style={{ color: "#6b7280" }} /></button>
-            </div>
-            <div className="p-6 space-y-4">
-              {selectedEvent.description && <p style={{ color: "#6b7280" }}>{selectedEvent.description}</p>}
-              <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <CalendarDays className="w-4 h-4" style={{ color: "#6b7280" }} />
-                    <span style={{ color: "#374151" }}>{formatEventDate(selectedEvent.date)}</span>
+        {/* Selected Event Modal (Fixed Syntax) */}
+        {selectedEvent && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden">
+              <div className="p-6 border-b flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-3 h-3 rounded-full" style={{ background: EVENT_COLORS[selectedEvent.type] }}></div>
+                    <span className="text-sm font-medium text-gray-500">{selectedEvent.type}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4" style={{ color: "#6b7280" }} />
-                    <span style={{ color: "#374151" }}>{formatTime(selectedEvent.startTime)} - {formatTime(selectedEvent.endTime)}</span>
+                  <h2 className="text-lg font-semibold text-gray-900">{selectedEvent.title}</h2>
+                </div>
+                <button onClick={() => setSelectedEvent(null)}><X className="w-5 h-5 text-gray-400" /></button>
+              </div>
+              
+              <div className="p-6 space-y-4">
+                {selectedEvent.description && <p className="text-gray-500">{selectedEvent.description}</p>}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-gray-700">
+                    <CalendarDays className="w-4 h-4 text-gray-400" />
+                    <span>{formatEventDate(selectedEvent.date)}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-700">
+                    <Clock className="w-4 h-4 text-gray-400" />
+                    <span>{formatTime(selectedEvent.startTime)} - {formatTime(selectedEvent.endTime)}</span>
                   </div>
                   
                   {selectedEvent.link && (
                     <div className="flex items-center gap-2">
-                      <Video className="w-4 h-4" style={{ color: "#6b7280" }} />
+                      <Video className="w-4 h-4 text-gray-400" />
                       <a 
                         href={selectedEvent.link.startsWith('http') ? selectedEvent.link : `https://${selectedEvent.link}`} 
                         target="_blank" 
                         rel="noopener noreferrer" 
-                        className="underline transition-colors hover:opacity-80" 
-                        style={{ color: "#3b82f6" }}
+                        className="text-blue-600 underline hover:text-blue-800"
                       >
                         {selectedEvent.link}
                       </a>
                     </div>
                   )}
                 </div>
-                {selectedEvent.link && (
-                  <div className="flex items-center gap-2">
-                    <Video className="w-4 h-4" style={{ color: "#6b7280" }} />
-                    <a href={selectedEvent.link} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "#3b82f6" }}>{selectedEvent.link}</a>
-                  </div>
-                )}
               </div>
-            </div>
-            <div className="p-6 border-t flex justify-end gap-3" style={{ borderColor: "#e5e7eb" }}>
-              <button onClick={() => setSelectedEvent(null)} className="px-4 py-2 rounded-xl" style={{ background: "#f3f4f6" }}>Close</button>
-              <button onClick={() => { setEditingEvent(selectedEvent); setEditForm({ title: selectedEvent.title, description: selectedEvent.description, type: selectedEvent.type, date: selectedEvent.date, startTime: selectedEvent.startTime.includes("T") ? selectedEvent.startTime.split("T")[1].substring(0,5) : selectedEvent.startTime, endTime: selectedEvent.endTime.includes("T") ? selectedEvent.endTime.split("T")[1].substring(0,5) : selectedEvent.endTime, link: selectedEvent.link || "" }); setSelectedEvent(null); }} className="px-4 py-2 rounded-xl text-white flex items-center gap-2" style={{ background: "#3b82f6" }}>
-                <Pencil className="w-4 h-4" /> Edit
-              </button>
-              <button onClick={() => { deleteEvent(selectedEvent.id); setSelectedEvent(null); }} className="px-4 py-2 rounded-xl text-white flex items-center gap-2" style={{ background: "#ef4444" }}>
-                <Trash2 className="w-4 h-4" /> Delete
-              </button>
+
+              <div className="p-6 border-t flex justify-end gap-3 bg-gray-50">
+                <button onClick={() => setSelectedEvent(null)} className="px-4 py-2 bg-white border rounded-xl">Close</button>
+                <button 
+                  onClick={() => {
+                    setEditingEvent(selectedEvent);
+                    setEditForm({
+                      title: selectedEvent.title,
+                      description: selectedEvent.description || "",
+                      type: selectedEvent.type,
+                      date: selectedEvent.date,
+                      startTime: selectedEvent.startTime.includes("T") ? selectedEvent.startTime.split("T")[1].substring(0,5) : selectedEvent.startTime,
+                      endTime: selectedEvent.endTime.includes("T") ? selectedEvent.endTime.split("T")[1].substring(0,5) : selectedEvent.endTime,
+                      link: selectedEvent.link || ""
+                    });
+                    setSelectedEvent(null);
+                  }} 
+                  className="px-4 py-2 bg-blue-600 text-white rounded-xl flex items-center gap-2"
+                >
+                  <Pencil className="w-4 h-4" /> Edit
+                </button>
+                <button 
+                  onClick={() => { deleteEvent(selectedEvent.id); setSelectedEvent(null); }} 
+                  className="px-4 py-2 bg-red-500 text-white rounded-xl flex items-center gap-2"
+                >
+                  <Trash2 className="w-4 h-4" /> Delete
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Edit Event Modal */}
-      {editingEvent && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b flex items-center justify-between" style={{ borderColor: "#e5e7eb" }}>
-              <h2 className="text-lg font-semibold" style={{ color: "#111827" }}>Edit Event</h2>
-              <button onClick={() => setEditingEvent(null)} className="p-1 rounded-lg hover:bg-gray-100"><X className="w-5 h-5" style={{ color: "#6b7280" }} /></button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Title</label>
-                <input type="text" value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} className="w-full px-4 py-2 rounded-xl border" style={{ borderColor: "#e5e7eb" }} placeholder="Event title" />
+        {/* Edit Event Modal */}
+        {editingEvent && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl w-full max-w-lg p-6 space-y-4">
+              <div className="flex justify-between items-center border-b pb-4">
+                <h2 className="text-lg font-semibold">Edit Event</h2>
+                <button onClick={() => setEditingEvent(null)}><X className="w-5 h-5" /></button>
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Type</label>
-                <select value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value as EventType })} className="w-full px-4 py-2 rounded-xl border" style={{ borderColor: "#e5e7eb" }}>
-                  <option value="Meeting">Meeting</option>
-                  <option value="Review">Review</option>
-                  <option value="Post">Post</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-              <div>
-                <DatePicker 
-                  label="Date" 
-                  value={editForm.date ? new Date(editForm.date) : undefined} 
-                  onChange={(val: any) => {
-                    const dateStr = val instanceof Date ? format(val, "yyyy-MM-dd") : (typeof val === "string" ? val : "");
-                    setEditForm({ ...editForm, date: dateStr });
-                  }} 
-                />
-              </div>
+              <input type="text" value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} className="w-full px-4 py-2 border rounded-xl" />
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Start Time</label>
-                  <input type="time" value={editForm.startTime} onChange={(e) => setEditForm({ ...editForm, startTime: e.target.value })} className="w-full px-4 py-2 rounded-xl border" style={{ borderColor: "#e5e7eb" }} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>End Time</label>
-                  <input type="time" value={editForm.endTime} onChange={(e) => setEditForm({ ...editForm, endTime: e.target.value })} className="w-full px-4 py-2 rounded-xl border" style={{ borderColor: "#e5e7eb" }} />
-                </div>
+                <input type="time" value={editForm.startTime} onChange={(e) => setEditForm({ ...editForm, startTime: e.target.value })} className="border p-2 rounded-xl" />
+                <input type="time" value={editForm.endTime} onChange={(e) => setEditForm({ ...editForm, endTime: e.target.value })} className="border p-2 rounded-xl" />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Link (optional)</label>
-                <input type="url" value={editForm.link} onChange={(e) => setEditForm({ ...editForm, link: e.target.value })} className="w-full px-4 py-2 rounded-xl border" style={{ borderColor: "#e5e7eb" }} placeholder="https://meet.google.com/..." />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1" style={{ color: "#374151" }}>Description</label>
-                <textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} className="w-full px-4 py-2 rounded-xl border resize-none" style={{ borderColor: "#e5e7eb" }} rows={3} placeholder="Event description" />
-              </div>
-            </div>
-            <div className="p-6 border-t flex justify-end gap-3" style={{ borderColor: "#e5e7eb" }}>
-              <button onClick={() => setEditingEvent(null)} className="px-4 py-2 rounded-xl" style={{ background: "#f3f4f6" }}>Cancel</button>
-              <button 
+              <input type="url" placeholder="Meeting Link" value={editForm.link} onChange={(e) => setEditForm({ ...editForm, link: e.target.value })} className="w-full px-4 py-2 border rounded-xl" />
+              <div className="flex justify-end gap-3 pt-4">
+                <button onClick={() => setEditingEvent(null)} className="px-4 py-2 bg-gray-100 rounded-xl">Cancel</button>
+                <button 
                   onClick={async () => {
                     const startDateTime = `${editForm.date}T${editForm.startTime}:00`;
                     const endDateTime = `${editForm.date}T${editForm.endTime}:00`;
-                    
-                    await updateEvent(editingEvent.id, { 
-                      title: editForm.title, 
-                      description: editForm.description, 
-                      type: editForm.type, 
-                      date: editForm.date,
-                      startTime: startDateTime, 
-                      endTime: endDateTime, 
-                      link: editForm.link 
-                    });
-                    
+                    await updateEvent(editingEvent.id, { ...editForm, startTime: startDateTime, endTime: endDateTime });
                     setEditingEvent(null);
                   }} 
-                  className="px-4 py-2 rounded-xl text-white" 
-                  style={{ background: "#3b82f6" }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-xl"
                 >
                   Save Changes
                 </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
     </DndProvider>
   );
 }
 
 function CalendarDay({ day, events, isCurrentMonth, isToday: isTodayDay, onEventClick, onEventDrop, onDateClick }: { day: Date; events: CalendarEvent[]; isCurrentMonth: boolean; isToday: boolean; onEventClick: (event: CalendarEvent) => void; onEventDrop: (eventId: string, newDate: Date) => void; onDateClick: (date: Date) => void; }) {
-  const [{ isOver }, drop] = useDrop(() => ({ accept: "event", drop: (item: { id: string }) => { onEventDrop(item.id, day); }, collect: (monitor) => ({ isOver: monitor.isOver() }) }), [day, onEventDrop]);
+  const [{ isOver }, drop] = useDrop(() => ({ accept: "event", drop: (item: { id: string }) => onEventDrop(item.id, day), collect: (monitor) => ({ isOver: monitor.isOver() }) }), [day, onEventDrop]);
   return (
-    <div ref={drop as unknown as React.LegacyRef<HTMLDivElement>} onClick={() => onDateClick(day)} className="min-h-[100px] p-2 border-b border-r transition-colors cursor-pointer hover:bg-blue-50" style={{ borderColor: "#e5e7eb", background: isOver ? "#fef3c7" : isTodayDay ? "#fffbeb" : "transparent", opacity: isCurrentMonth ? 1 : 0.5 }}>
-      <div className={`text-sm mb-1 ${isTodayDay ? "font-semibold" : ""}`} style={{ color: isTodayDay ? "#f59e0b" : "#374151" }}>{format(day, "d")}</div>
+    <div ref={drop as any} onClick={() => onDateClick(day)} className="min-h-[100px] p-2 border-b border-r hover:bg-blue-50 cursor-pointer" style={{ background: isOver ? "#fef3c7" : isTodayDay ? "#fffbeb" : "transparent", opacity: isCurrentMonth ? 1 : 0.5 }}>
+      <div className={`text-sm mb-1 ${isTodayDay ? "font-semibold text-amber-500" : "text-gray-700"}`}>{format(day, "d")}</div>
       <div className="space-y-1">
         {events.slice(0, 3).map((event) => <MemoizedDraggableEvent key={event.id} event={event} onClick={(e) => { e.stopPropagation(); onEventClick(event); }} />)}
-        {events.length > 3 && <div className="text-xs" style={{ color: "#6b7280" }}>+{events.length - 3} more</div>}
       </div>
     </div>
   );
@@ -525,8 +363,8 @@ function CalendarDay({ day, events, isCurrentMonth, isToday: isTodayDay, onEvent
 
 function DraggableEvent({ event, onClick }: { event: CalendarEvent; onClick: (e: any) => void }) {
   const [{ isDragging }, drag] = useDrag(() => ({ type: "event", item: { id: event.id }, collect: (monitor) => ({ isDragging: monitor.isDragging() }) }), [event.id]);
-  const eventColor = EVENT_COLORS[event.type as EventType] || "#6b7280";
-  return <button ref={drag as unknown as React.LegacyRef<HTMLButtonElement>} onClick={onClick} className="w-full text-left px-2 py-1 rounded text-xs truncate cursor-move transition-all border-l-4" style={{ background: `${eventColor}15`, color: eventColor, borderColor: eventColor, opacity: isDragging ? 0.5 : 1, borderRadius: "0.375rem" }}>{event.title}</button>;
+  const color = EVENT_COLORS[event.type] || "#6b7280";
+  return <button ref={drag as any} onClick={onClick} className="w-full text-left px-2 py-1 rounded text-xs truncate border-l-4" style={{ background: `${color}15`, color: color, borderColor: color, opacity: isDragging ? 0.5 : 1 }}>{event.title}</button>;
 }
 
 const MemoizedDraggableEvent = memo(DraggableEvent);
