@@ -381,13 +381,29 @@ export default function CalendarPage() {
             <div className="p-6 space-y-4">
               {selectedEvent.description && <p style={{ color: "#6b7280" }}>{selectedEvent.description}</p>}
               <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <CalendarDays className="w-4 h-4" style={{ color: "#6b7280" }} />
-                  <span style={{ color: "#374151" }}>{formatEventDate(selectedEvent.date)}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4" style={{ color: "#6b7280" }} />
-                  <span style={{ color: "#374151" }}>{formatTime(selectedEvent.startTime)} - {formatTime(selectedEvent.endTime)}</span>
+                  <div className="flex items-center gap-2">
+                    <CalendarDays className="w-4 h-4" style={{ color: "#6b7280" }} />
+                    <span style={{ color: "#374151" }}>{formatEventDate(selectedEvent.date)}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4" style={{ color: "#6b7280" }} />
+                    <span style={{ color: "#374151" }}>{formatTime(selectedEvent.startTime)} - {formatTime(selectedEvent.endTime)}</span>
+                  </div>
+                  
+                  {selectedEvent.link && (
+                    <div className="flex items-center gap-2">
+                      <Video className="w-4 h-4" style={{ color: "#6b7280" }} />
+                      <a 
+                        href={selectedEvent.link.startsWith('http') ? selectedEvent.link : `https://${selectedEvent.link}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="underline transition-colors hover:opacity-80" 
+                        style={{ color: "#3b82f6" }}
+                      >
+                        {selectedEvent.link}
+                      </a>
+                    </div>
+                  )}
                 </div>
                 {selectedEvent.link && (
                   <div className="flex items-center gap-2">
