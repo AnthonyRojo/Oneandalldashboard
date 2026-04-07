@@ -41,6 +41,7 @@ export async function GET(
       location: e.location,
       color: e.color,
       createdAt: e.created_at,
+      link: e.link,
     }));
 
     return success({ events: formatted });
@@ -99,6 +100,7 @@ export async function POST(
         location: body.location || null,
         color: body.color || "#3b82f6",
         created_by: user.id,
+        link: body.link || null,
       })
       .select()
       .single();
@@ -118,6 +120,7 @@ export async function POST(
       location: event.location,
       color: event.color,
       createdAt: event.created_at,
+      link: event.link,
     };
 
     await logActivity(teamId, user.id, "created event", "event", event.id, {
