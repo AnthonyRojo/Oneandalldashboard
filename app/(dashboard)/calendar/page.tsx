@@ -219,6 +219,19 @@ export default function CalendarPage() {
                 <label className="block text-sm font-medium mb-1">Title</label>
                 <input type="text" value={newEvent.title} onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })} className="w-full px-4 py-2 border rounded-xl" placeholder="Event title" />
               </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Event Type</label>
+                <select 
+                  value={newEvent.type} 
+                  onChange={(e) => setNewEvent({ ...newEvent, type: e.target.value as EventType })} 
+                  className="w-full px-4 py-2 border rounded-xl bg-white"
+                >
+                  <option value="Meeting">Meeting</option>
+                  <option value="Review">Review</option>
+                  <option value="Post">Post</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
               <DatePicker label="Date" value={newEvent.date ? new Date(newEvent.date) : undefined} onChange={(val: any) => setNewEvent({ ...newEvent, date: val instanceof Date ? format(val, "yyyy-MM-dd") : val })} />
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -324,6 +337,19 @@ export default function CalendarPage() {
               <div>
                 <label className="block text-sm font-medium mb-1">Title</label>
                 <input type="text" value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} className="w-full px-4 py-2 border rounded-xl" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Event Type</label>
+                <select 
+                  value={editForm.type} 
+                  onChange={(e) => setEditForm({ ...editForm, type: e.target.value as EventType })} 
+                  className="w-full px-4 py-2 border rounded-xl bg-white"
+                >
+                  <option value="Meeting">Meeting</option>
+                  <option value="Review">Review</option>
+                  <option value="Post">Post</option>
+                  <option value="Other">Other</option>
+                </select>
               </div>
               <DatePicker label="Date" value={editForm.date ? new Date(editForm.date) : undefined} onChange={(val: any) => setEditForm({ ...editForm, date: val instanceof Date ? format(val, "yyyy-MM-dd") : val })} />
               <div className="grid grid-cols-2 gap-4">
