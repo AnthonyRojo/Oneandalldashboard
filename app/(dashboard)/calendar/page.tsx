@@ -36,6 +36,7 @@ export default function CalendarPage() {
     startTime: "09:00",
     endTime: "10:00",
     link: "",
+    color: "#8b5cf6", // Add this line
   });
   const [editForm, setEditForm] = useState({
     title: "",
@@ -45,6 +46,7 @@ export default function CalendarPage() {
     startTime: "09:00",
     endTime: "10:00",
     link: "",
+    color: "#8b5cf6", // Add this line
   });
 
   const monthStart = startOfMonth(currentMonth);
@@ -91,7 +93,7 @@ export default function CalendarPage() {
     });
     
     setShowCreateModal(false);
-    setNewEvent({ title: "", description: "", type: "Meeting", date: "", startTime: "09:00", endTime: "10:00", link: "" });
+    setNewEvent({ title: "", description: "", type: "Meeting", date: "", startTime: "09:00", endTime: "10:00", link: "", color: "#8b5cf6" });
   };
 
   const handleMoveEvent = async (eventId: string, newDate: Date) => {
@@ -149,10 +151,11 @@ export default function CalendarPage() {
             <div className="divide-y max-h-[250px] overflow-y-auto">
               {todayEvents.length > 0 ? todayEvents.map((event) => {
                 const Icon = EVENT_ICONS[event.type] || Clock;
+                const eventColor = event.color || EVENT_COLORS[event.type];
                 return (
                   <button key={event.id} onClick={() => setSelectedEvent(event)} className="w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors">
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${EVENT_COLORS[event.type]}20` }}>
-                      <Icon className="w-4 h-4" style={{ color: EVENT_COLORS[event.type] }} />
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${eventColor}20` }}>
+                      <Icon className="w-4 h-4" style={{ color: eventColor }} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="truncate font-medium text-sm text-gray-900">{event.title}</p>
@@ -172,10 +175,11 @@ export default function CalendarPage() {
             <div className="divide-y max-h-[250px] overflow-y-auto">
               {upcomingEvents.length > 0 ? upcomingEvents.map((event) => {
                 const Icon = EVENT_ICONS[event.type] || Clock;
+                const eventColor = event.color || EVENT_COLORS[event.type];
                 return (
                   <button key={event.id} onClick={() => setSelectedEvent(event)} className="w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors">
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${EVENT_COLORS[event.type]}20` }}>
-                      <Icon className="w-4 h-4" style={{ color: EVENT_COLORS[event.type] }} />
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${eventColor}20` }}>
+                      <Icon className="w-4 h-4" style={{ color: eventColor }} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="truncate font-medium text-sm text-gray-900">{event.title}</p>
@@ -232,6 +236,32 @@ export default function CalendarPage() {
                   <option value="Other">Other</option>
                 </select>
               </div>
+
+              {/* POST COLOR TOGGLE - ADDED HERE */}
+              {newEvent.type === "Post" && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Post Color</label>
+                  <div className="flex gap-4">
+                    <button 
+                      type="button" 
+                      onClick={() => setNewEvent({ ...newEvent, color: "#f59e0b" })} 
+                      className={`px-3 py-1 rounded-full text-xs font-medium border-2 ${newEvent.color === "#f59e0b" ? "border-amber-600 bg-amber-50" : "border-transparent bg-gray-100"}`} 
+                      style={{ color: "#f59e0b" }}
+                    >
+                      Orange
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => setNewEvent({ ...newEvent, color: "#3b82f6" })} 
+                      className={`px-3 py-1 rounded-full text-xs font-medium border-2 ${newEvent.color === "#3b82f6" ? "border-blue-600 bg-blue-50" : "border-transparent bg-gray-100"}`} 
+                      style={{ color: "#3b82f6" }}
+                    >
+                      Blue
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <DatePicker label="Date" value={newEvent.date ? new Date(newEvent.date) : undefined} onChange={(val: any) => setNewEvent({ ...newEvent, date: val instanceof Date ? format(val, "yyyy-MM-dd") : val })} />
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -266,7 +296,7 @@ export default function CalendarPage() {
               <div className="p-6 border-b flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <div className="w-3 h-3 rounded-full" style={{ background: EVENT_COLORS[selectedEvent.type] }}></div>
+                    <div className="w-3 h-3 rounded-full" style={{ background: selectedEvent.color || EVENT_COLORS[selectedEvent.type] }}></div>
                     <span className="text-sm font-medium text-gray-500">{selectedEvent.type}</span>
                   </div>
                   <h2 className="text-lg font-semibold">{selectedEvent.title}</h2>
@@ -310,7 +340,8 @@ export default function CalendarPage() {
                       date: selectedEvent.date,
                       startTime: selectedEvent.startTime.includes("T") ? selectedEvent.startTime.split("T")[1].substring(0,5) : selectedEvent.startTime,
                       endTime: selectedEvent.endTime.includes("T") ? selectedEvent.endTime.split("T")[1].substring(0,5) : selectedEvent.endTime,
-                      link: selectedEvent.link || ""
+                      link: selectedEvent.link || "",
+                      color: selectedEvent.color || "#8b5cf6" // ADDED POPULATION HERE
                     });
                     setSelectedEvent(null);
                   }} 
@@ -351,6 +382,32 @@ export default function CalendarPage() {
                   <option value="Other">Other</option>
                 </select>
               </div>
+
+              {/* EDIT POST COLOR TOGGLE - ADDED HERE */}
+              {editForm.type === "Post" && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Post Color</label>
+                  <div className="flex gap-4">
+                    <button 
+                      type="button" 
+                      onClick={() => setEditForm({ ...editForm, color: "#f59e0b" })} 
+                      className={`px-3 py-1 rounded-full text-xs font-medium border-2 ${editForm.color === "#f59e0b" ? "border-amber-600 bg-amber-50" : "border-transparent bg-gray-100"}`} 
+                      style={{ color: "#f59e0b" }}
+                    >
+                      Orange
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => setEditForm({ ...editForm, color: "#3b82f6" })} 
+                      className={`px-3 py-1 rounded-full text-xs font-medium border-2 ${editForm.color === "#3b82f6" ? "border-blue-600 bg-blue-50" : "border-transparent bg-gray-100"}`} 
+                      style={{ color: "#3b82f6" }}
+                    >
+                      Blue
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <DatePicker label="Date" value={editForm.date ? new Date(editForm.date) : undefined} onChange={(val: any) => setEditForm({ ...editForm, date: val instanceof Date ? format(val, "yyyy-MM-dd") : val })} />
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -407,7 +464,10 @@ function CalendarDay({ day, events, isCurrentMonth, isToday: isTodayDay, onEvent
 
 function DraggableEvent({ event, onClick }: any) {
   const [{ isDragging }, drag] = useDrag(() => ({ type: "event", item: { id: event.id }, collect: (m) => ({ isDragging: m.isDragging() }) }), [event.id]);
-  const color = EVENT_COLORS[event.type as EventType] || "#6b7280";
+  
+  // UPDATED: Now respects the custom color if one is saved in the database
+  const color = event.color || EVENT_COLORS[event.type as EventType] || "#6b7280";
+  
   return <button ref={drag as any} onClick={onClick} className="w-full text-left px-2 py-1 rounded text-xs truncate border-l-4" style={{ background: `${color}15`, color: color, borderColor: color, opacity: isDragging ? 0.5 : 1 }}>{event.title}</button>;
 }
 const MemoizedDraggableEvent = memo(DraggableEvent);
