@@ -36,7 +36,7 @@ export default function CalendarPage() {
     startTime: "09:00",
     endTime: "10:00",
     link: "",
-    color: "#8b5cf6", // Add this line
+    color: "", // Fixed: removed hardcoded purple
   });
   const [editForm, setEditForm] = useState({
     title: "",
@@ -46,7 +46,7 @@ export default function CalendarPage() {
     startTime: "09:00",
     endTime: "10:00",
     link: "",
-    color: "#8b5cf6", // Add this line
+    color: "", // Fixed: removed hardcoded purple
   });
 
   const monthStart = startOfMonth(currentMonth);
@@ -93,7 +93,8 @@ export default function CalendarPage() {
     });
     
     setShowCreateModal(false);
-    setNewEvent({ title: "", description: "", type: "Meeting", date: "", startTime: "09:00", endTime: "10:00", link: "", color: "#8b5cf6" });
+    // Fixed: resetting color to empty string
+    setNewEvent({ title: "", description: "", type: "Meeting", date: "", startTime: "09:00", endTime: "10:00", link: "", color: "" });
   };
 
   const handleMoveEvent = async (eventId: string, newDate: Date) => {
@@ -169,7 +170,8 @@ export default function CalendarPage() {
 
           <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: "#e5e7eb" }}>
             <div className="px-5 py-4 border-b flex items-center gap-2">
-              <Clock className="w-5 h-5" style={{ color: "#3b82f6" }} />
+              {/* Fixed: Icon color is now pink to match Meetings */}
+              <Clock className="w-5 h-5" style={{ color: "#ec4899" }} />
               <h3 style={{ color: "#111827", fontWeight: 600 }}>Upcoming</h3>
             </div>
             <div className="divide-y max-h-[250px] overflow-y-auto">
@@ -341,7 +343,7 @@ export default function CalendarPage() {
                       startTime: selectedEvent.startTime.includes("T") ? selectedEvent.startTime.split("T")[1].substring(0,5) : selectedEvent.startTime,
                       endTime: selectedEvent.endTime.includes("T") ? selectedEvent.endTime.split("T")[1].substring(0,5) : selectedEvent.endTime,
                       link: selectedEvent.link || "",
-                      color: selectedEvent.color || "#8b5cf6" // ADDED POPULATION HERE
+                      color: selectedEvent.color || "" // Fixed: changed from "#8b5cf6" to "" so it uses the right default
                     });
                     setSelectedEvent(null);
                   }} 
