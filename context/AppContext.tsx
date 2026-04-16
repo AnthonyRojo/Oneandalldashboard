@@ -85,6 +85,8 @@ export interface Task {
   createdAt?: string;
 }
 
+// AppContext (5).tsx
+
 export interface CalendarEvent {
   id: string;
   teamId: string;
@@ -95,6 +97,7 @@ export interface CalendarEvent {
   endTime: string;
   type: EventType;
   link?: string;
+  color?: string; // Add this line
 }
 
 export interface AnnouncementComment {
