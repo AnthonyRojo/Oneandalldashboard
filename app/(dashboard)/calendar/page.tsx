@@ -9,7 +9,7 @@ import { ChevronLeft, ChevronRight, Plus, X, Clock, Video, Eye, FileText, Trash2
 import DatePicker from "@/components/ui/DatePicker";
 
 const EVENT_COLORS: Record<EventType, string> = {
-  Meeting: "#ec4899",
+  Meeting: "#ec4899", // Pink
   Review: "#f59e0b",
   Post: "#8b5cf6",
   Other: "#6b7280",
@@ -36,7 +36,7 @@ export default function CalendarPage() {
     startTime: "09:00",
     endTime: "10:00",
     link: "",
-    color: "", // Fixed: removed hardcoded purple
+    color: "", 
   });
   const [editForm, setEditForm] = useState({
     title: "",
@@ -46,7 +46,7 @@ export default function CalendarPage() {
     startTime: "09:00",
     endTime: "10:00",
     link: "",
-    color: "", // Fixed: removed hardcoded purple
+    color: "", 
   });
 
   const monthStart = startOfMonth(currentMonth);
@@ -93,7 +93,6 @@ export default function CalendarPage() {
     });
     
     setShowCreateModal(false);
-    // Fixed: resetting color to empty string
     setNewEvent({ title: "", description: "", type: "Meeting", date: "", startTime: "09:00", endTime: "10:00", link: "", color: "" });
   };
 
@@ -152,7 +151,8 @@ export default function CalendarPage() {
             <div className="divide-y max-h-[250px] overflow-y-auto">
               {todayEvents.length > 0 ? todayEvents.map((event) => {
                 const Icon = EVENT_ICONS[event.type] || Clock;
-                const eventColor = event.color || EVENT_COLORS[event.type];
+                // STRICT CHECK: Only use custom color if it is a Post
+                const eventColor = (event.type === "Post" && event.color) ? event.color : EVENT_COLORS[event.type];
                 return (
                   <button key={event.id} onClick={() => setSelectedEvent(event)} className="w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors">
                     <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${eventColor}20` }}>
@@ -170,14 +170,14 @@ export default function CalendarPage() {
 
           <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: "#e5e7eb" }}>
             <div className="px-5 py-4 border-b flex items-center gap-2">
-              {/* Fixed: Icon color is now pink to match Meetings */}
               <Clock className="w-5 h-5" style={{ color: "#ec4899" }} />
               <h3 style={{ color: "#111827", fontWeight: 600 }}>Upcoming</h3>
             </div>
             <div className="divide-y max-h-[250px] overflow-y-auto">
               {upcomingEvents.length > 0 ? upcomingEvents.map((event) => {
                 const Icon = EVENT_ICONS[event.type] || Clock;
-                const eventColor = event.color || EVENT_COLORS[event.type];
+                // STRICT CHECK: Only use custom color if it is a Post
+                const eventColor = (event.type === "Post" && event.color) ? event.color : EVENT_COLORS[event.type];
                 return (
                   <button key={event.id} onClick={() => setSelectedEvent(event)} className="w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors">
                     <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${eventColor}20` }}>
@@ -239,7 +239,6 @@ export default function CalendarPage() {
                 </select>
               </div>
 
-              {/* POST COLOR TOGGLE - ADDED HERE */}
               {newEvent.type === "Post" && (
                 <div>
                   <label className="block text-sm font-medium mb-1">Post Color</label>
@@ -298,7 +297,8 @@ export default function CalendarPage() {
               <div className="p-6 border-b flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <div className="w-3 h-3 rounded-full" style={{ background: selectedEvent.color || EVENT_COLORS[selectedEvent.type] }}></div>
+                    {/* STRICT CHECK */}
+                    <div className="w-3 h-3 rounded-full" style={{ background: (selectedEvent.type === "Post" && selectedEvent.color) ? selectedEvent.color : EVENT_COLORS[selectedEvent.type] }}></div>
                     <span className="text-sm font-medium text-gray-500">{selectedEvent.type}</span>
                   </div>
                   <h2 className="text-lg font-semibold">{selectedEvent.title}</h2>
@@ -343,7 +343,7 @@ export default function CalendarPage() {
                       startTime: selectedEvent.startTime.includes("T") ? selectedEvent.startTime.split("T")[1].substring(0,5) : selectedEvent.startTime,
                       endTime: selectedEvent.endTime.includes("T") ? selectedEvent.endTime.split("T")[1].substring(0,5) : selectedEvent.endTime,
                       link: selectedEvent.link || "",
-                      color: selectedEvent.color || "" // Fixed: changed from "#8b5cf6" to "" so it uses the right default
+                      color: selectedEvent.color || "" 
                     });
                     setSelectedEvent(null);
                   }} 
@@ -385,7 +385,6 @@ export default function CalendarPage() {
                 </select>
               </div>
 
-              {/* EDIT POST COLOR TOGGLE - ADDED HERE */}
               {editForm.type === "Post" && (
                 <div>
                   <label className="block text-sm font-medium mb-1">Post Color</label>
@@ -467,8 +466,8 @@ function CalendarDay({ day, events, isCurrentMonth, isToday: isTodayDay, onEvent
 function DraggableEvent({ event, onClick }: any) {
   const [{ isDragging }, drag] = useDrag(() => ({ type: "event", item: { id: event.id }, collect: (m) => ({ isDragging: m.isDragging() }) }), [event.id]);
   
-  // UPDATED: Now respects the custom color if one is saved in the database
-  const color = event.color || EVENT_COLORS[event.type as EventType] || "#6b7280";
+  // STRICT CHECK: Only use custom color if it is a Post
+  const color = (event.type === "Post" && event.color) ? event.color : (EVENT_COLORS[event.type as EventType] || "#6b7280");
   
   return <button ref={drag as any} onClick={onClick} className="w-full text-left px-2 py-1 rounded text-xs truncate border-l-4" style={{ background: `${color}15`, color: color, borderColor: color, opacity: isDragging ? 0.5 : 1 }}>{event.title}</button>;
 }
