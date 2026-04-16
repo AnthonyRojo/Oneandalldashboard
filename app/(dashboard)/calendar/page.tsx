@@ -9,7 +9,7 @@ import { ChevronLeft, ChevronRight, Plus, X, Clock, Video, Eye, FileText, Trash2
 import DatePicker from "@/components/ui/DatePicker";
 
 const EVENT_COLORS: Record<EventType, string> = {
-  Meeting: "#3b82f6",
+  Meeting: "#ec4899",
   Review: "#f59e0b",
   Post: "#8b5cf6",
   Other: "#6b7280",
