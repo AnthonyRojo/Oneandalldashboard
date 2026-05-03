@@ -21,6 +21,12 @@ export type EventType = "Meeting" | "Review" | "Post" | "Other";
 export type AnnouncementType = "update" | "poll" | "question";
 export type ActivityType = "task" | "project" | "member" | "announcement" | "event" | "comment" | "submit" | "team";
 
+export interface Toast {
+  id: string;
+  message: string;
+  type: "success" | "error" | "info";
+}
+
 export interface AuthUser {
   id: string;
   name: string;
@@ -249,6 +255,11 @@ interface AppContextType {
   // Data loading
   isDataLoading: boolean;
   refreshTeamData: () => Promise<void>;
+
+  // Toasts
+  toasts: Toast[];
+  addToast: (message: string, type?: Toast["type"]) => void;
+  removeToast: (id: string) => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -281,6 +292,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [chatGroups, setChatGroups] = useState<ChatGroup[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [toasts, setToasts] = useState<Toast[]>([]);
 
   // Refs to avoid stale closures
   const currentTeamRef = useRef<string>("");
@@ -722,79 +734,101 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setChatGroups([]);
   }, []);
 
-// ── Task ops ───────────────────────────────────────────────────────────────
+// ── Toast ops ──────────────────────────────────────────────────────────────
+  const addToast = useCallback((message: string, type: Toast["type"] = "info") => {
+    const id = `toast-${Date.now()}-${Math.random()}`;
+    setToasts((prev: Toast[]) => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts((prev: Toast[]) => prev.filter((t: Toast) => t.id !== id)), 3500);
+  }, []);
+
+  const removeToast = useCallback((id: string) => {
+    setToasts((prev: Toast[]) => prev.filter((t: Toast) => t.id !== id));
+  }, []);
+
+  // ── Task ops ───────────────────────────────────────────────────────────────
   const addTask = useCallback(
     async (task: Omit<Task, "id" | "teamId" | "comments">) => {
       if (!tokenRef.current || !currentTeamId) return;
-      const res = await api.createTask(currentTeamId, task, tokenRef.current);
-      setTasks((prev) => [...prev, res.task]);
-      // Realtime will auto-detect this change
+      try {
+        const res = await api.createTask(currentTeamId, task, tokenRef.current);
+        setTasks((prev: Task[]) => [...prev, res.task]);
+        addToast("Task created", "success");
+      } catch {
+        addToast("Failed to create task", "error");
+      }
     },
-    [currentTeamId]
+    [currentTeamId, addToast]
   );
 
   const updateTask = useCallback(
     async (id: string, updates: Partial<Task>) => {
       if (!tokenRef.current || !currentTeamId) return;
-      
-      // Optimistic UI update
-      setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
-      
-      const res = await api.updateTask(currentTeamId, id, updates, tokenRef.current);
-      
-      let calculatedProgress = 0;
-      let shouldUpdateProgress = false;
-      // Fallback target ID just in case
-      let targetProjectId = updates.projectId;
 
-      // Update tasks and calculate new progress based on the freshest state
-      setTasks((prev) => {
-        const existingTask = prev.find(t => t.id === id);
-        targetProjectId = targetProjectId || res?.task?.projectId || existingTask?.projectId;
-        
-        // BUG FIX: Merge updates AT THE END so they always win
-        const updated = prev.map((t) => (
-          t.id === id ? { ...t, ...(res?.task || {}), ...updates } : t
-        ));
-        
-        if (updates.status !== undefined && targetProjectId) {
-          shouldUpdateProgress = true;
-          const projectTasks = updated.filter(
-            (t) => t.teamId === currentTeamId && t.projectId === targetProjectId
+      // Snapshot for rollback
+      let snapshot: Task[] = [];
+      setTasks((prev: Task[]) => { snapshot = prev; return prev.map((t: Task) => (t.id === id ? { ...t, ...updates } : t)); });
+
+      try {
+        const res = await api.updateTask(currentTeamId, id, updates, tokenRef.current);
+
+        let calculatedProgress = 0;
+        let shouldUpdateProgress = false;
+        let targetProjectId = updates.projectId;
+
+        setTasks((prev: Task[]) => {
+          const existingTask = prev.find((t: Task) => t.id === id);
+          targetProjectId = targetProjectId || res?.task?.projectId || existingTask?.projectId;
+
+          const updated = prev.map((t: Task) => (
+            t.id === id ? { ...t, ...(res?.task || {}), ...updates } : t
+          ));
+
+          if (updates.status !== undefined && targetProjectId) {
+            shouldUpdateProgress = true;
+            const projectTasks = updated.filter(
+              (t: Task) => t.teamId === currentTeamId && t.projectId === targetProjectId
+            );
+            const total = projectTasks.length;
+            const done = projectTasks.filter((t: Task) => t.status === "completed").length;
+            calculatedProgress = total > 0 ? Math.round((done / total) * 100) : 0;
+          }
+
+          return updated;
+        });
+
+        if (shouldUpdateProgress && targetProjectId) {
+          setProjects((p: Project[]) =>
+            p.map((proj: Project) => (proj.id === targetProjectId ? { ...proj, progress: calculatedProgress } : proj))
           );
-          const total = projectTasks.length;
-          const done = projectTasks.filter((t) => t.status === "completed").length;
-          calculatedProgress = total > 0 ? Math.round((done / total) * 100) : 0;
-        }
-        
-        return updated;
-      });
 
-      // Safely perform side effects OUTSIDE the state setter function
-      if (shouldUpdateProgress && targetProjectId) {
-        setProjects((p) =>
-          p.map((proj) => (proj.id === targetProjectId ? { ...proj, progress: calculatedProgress } : proj))
-        );
-
-        if (tokenRef.current) {
-          api
-            .updateProject(currentTeamId, targetProjectId, { progress: calculatedProgress }, tokenRef.current)
-            .catch((e) => console.log(`Auto-progress update error: ${e}`));
+          if (tokenRef.current) {
+            api
+              .updateProject(currentTeamId, targetProjectId, { progress: calculatedProgress }, tokenRef.current)
+              .catch((e) => console.log(`Auto-progress update error: ${e}`));
+          }
         }
+      } catch {
+        setTasks(snapshot);
+        addToast("Failed to update task", "error");
       }
-      // Realtime will auto-detect this change
     },
-    [currentTeamId]
+    [currentTeamId, addToast]
   );
 
   const deleteTask = useCallback(
     async (id: string) => {
       if (!tokenRef.current || !currentTeamId) return;
-      setTasks((prev) => prev.filter((t) => t.id !== id));
-      await api.deleteTask(currentTeamId, id, tokenRef.current);
-      // Realtime will auto-detect this change
+      let snapshot: Task[] = [];
+      setTasks((prev: Task[]) => { snapshot = prev; return prev.filter((t: Task) => t.id !== id); });
+      try {
+        await api.deleteTask(currentTeamId, id, tokenRef.current);
+        addToast("Task deleted", "success");
+      } catch {
+        setTasks(snapshot);
+        addToast("Failed to delete task", "error");
+      }
     },
-    [currentTeamId]
+    [currentTeamId, addToast]
   );
 
   const addTaskComment = useCallback(
@@ -1162,6 +1196,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setSearchQuery,
         isDataLoading,
         refreshTeamData,
+        toasts,
+        addToast,
+        removeToast,
       }}
     >
       {children}

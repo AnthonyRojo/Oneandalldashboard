@@ -1,14 +1,14 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { useApp, ChatMessage } from "@/context/AppContext";
+import { useApp, ChatMessage, Toast } from "@/context/AppContext";
 import {
   LayoutDashboard, CheckSquare, Calendar, Megaphone, BarChart2,
   Users, Settings, HelpCircle, LogOut, Zap, ChevronDown, Plus,
   Bell, MessageSquare, Search, X, Check, Loader2, Send, Pencil, Trash2,
-  Hash, UserPlus
+  Hash, UserPlus, CheckCircle2, AlertCircle, Info,
 } from "lucide-react";
 
 const AVATAR_COLORS = ["#f59e0b", "#3b82f6", "#8b5cf6", "#10b981", "#ec4899", "#f97316", "#06b6d4"];
@@ -31,6 +31,158 @@ const NOTIF_NAV: Record<string, string> = {
   announcement: "/announcements", event: "/calendar",
   comment: "/announcements", submit: "/tasks", team: "/dashboard",
 };
+
+// ── Toast Container ────────────────────────────────────────────────────────────
+function ToastContainer({ toasts, removeToast }: { toasts: Toast[]; removeToast: (id: string) => void }) {
+  if (toasts.length === 0) return null;
+  const ICONS = {
+    success: <CheckCircle2 className="w-4 h-4" style={{ color: "#22c55e" }} />,
+    error: <AlertCircle className="w-4 h-4" style={{ color: "#ef4444" }} />,
+    info: <Info className="w-4 h-4" style={{ color: "#3b82f6" }} />,
+  };
+  return (
+    <div className="fixed bottom-5 right-5 z-[200] flex flex-col gap-2 pointer-events-none">
+      {toasts.map((t) => (
+        <div key={t.id} className="flex items-center gap-3 px-4 py-3 rounded-2xl border shadow-lg pointer-events-auto"
+          style={{ background: "white", borderColor: "#e5e7eb", minWidth: 240, maxWidth: 360, animation: "slideInRight 0.2s ease" }}>
+          {ICONS[t.type]}
+          <p className="flex-1 text-sm" style={{ color: "#374151" }}>{t.message}</p>
+          <button onClick={() => removeToast(t.id)} style={{ color: "#9ca3af" }}>
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Global Search Modal ────────────────────────────────────────────────────────
+function GlobalSearchModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { currentTasks, currentMembers, currentProjects, currentAnnouncements } = useApp();
+  const [query, setQuery] = useState("");
+  const router = useRouter();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) { setQuery(""); setTimeout(() => inputRef.current?.focus(), 50); }
+  }, [open]);
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [onClose]);
+
+  const results = useMemo(() => {
+    const q = query.toLowerCase().trim();
+    if (!q) return null;
+    return {
+      tasks: currentTasks.filter((t) => t.title.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q)).slice(0, 5),
+      members: currentMembers.filter((m) => m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q)).slice(0, 4),
+      projects: currentProjects.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 4),
+      announcements: currentAnnouncements.filter((a) => a.content.toLowerCase().includes(q)).slice(0, 3),
+    };
+  }, [query, currentTasks, currentMembers, currentProjects, currentAnnouncements]);
+
+  const hasResults = results && (results.tasks.length + results.members.length + results.projects.length + results.announcements.length) > 0;
+
+  const go = (path: string) => { router.push(path); onClose(); };
+
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-20 px-4" style={{ background: "rgba(0,0,0,0.45)" }} onClick={onClose}>
+      <div className="w-full max-w-xl rounded-2xl border shadow-2xl overflow-hidden" style={{ background: "white", borderColor: "#e5e7eb" }} onClick={(e) => e.stopPropagation()}>
+        {/* Search input */}
+        <div className="flex items-center gap-3 px-4 py-3.5 border-b" style={{ borderColor: "#f0f0ea" }}>
+          <Search className="w-5 h-5 flex-shrink-0" style={{ color: "#9ca3af" }} />
+          <input ref={inputRef} value={query} onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search tasks, members, projects..."
+            className="flex-1 outline-none text-sm" style={{ color: "#111827", background: "transparent" }} />
+          <button onClick={onClose} style={{ color: "#9ca3af" }}><X className="w-4 h-4" /></button>
+        </div>
+
+        {/* Results */}
+        <div className="max-h-[420px] overflow-y-auto">
+          {!query && (
+            <div className="p-8 text-center">
+              <Search className="w-8 h-8 mx-auto mb-2" style={{ color: "#e5e7eb" }} />
+              <p style={{ fontSize: "0.875rem", color: "#9ca3af" }}>Type to search across your workspace</p>
+            </div>
+          )}
+          {query && !hasResults && (
+            <div className="p-8 text-center">
+              <p style={{ fontSize: "0.875rem", color: "#9ca3af" }}>No results for &quot;{query}&quot;</p>
+            </div>
+          )}
+          {hasResults && (
+            <div className="p-2">
+              {results!.tasks.length > 0 && (
+                <div className="mb-2">
+                  <p className="px-3 py-1 text-xs font-semibold uppercase tracking-wide" style={{ color: "#9ca3af" }}>Tasks</p>
+                  {results!.tasks.map((t) => (
+                    <button key={t.id} onClick={() => go("/tasks")}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors hover:bg-gray-50">
+                      <CheckSquare className="w-4 h-4 flex-shrink-0" style={{ color: "#3b82f6" }} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate" style={{ color: "#111827" }}>{t.title}</p>
+                        <p className="text-xs truncate" style={{ color: "#9ca3af" }}>{t.status} · {t.priority}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {results!.members.length > 0 && (
+                <div className="mb-2">
+                  <p className="px-3 py-1 text-xs font-semibold uppercase tracking-wide" style={{ color: "#9ca3af" }}>Members</p>
+                  {results!.members.map((m) => (
+                    <button key={m.id} onClick={() => go("/team")}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors hover:bg-gray-50">
+                      <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+                        style={{ background: getAvatarColor(m.name) }}>
+                        {m.name.slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate" style={{ color: "#111827" }}>{m.name}</p>
+                        <p className="text-xs truncate" style={{ color: "#9ca3af" }}>{m.role} · {m.email}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {results!.projects.length > 0 && (
+                <div className="mb-2">
+                  <p className="px-3 py-1 text-xs font-semibold uppercase tracking-wide" style={{ color: "#9ca3af" }}>Projects</p>
+                  {results!.projects.map((p) => (
+                    <button key={p.id} onClick={() => go("/dashboard")}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors hover:bg-gray-50">
+                      <div className="w-4 h-4 rounded flex-shrink-0" style={{ background: p.color || "#8b5cf6" }} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate" style={{ color: "#111827" }}>{p.name}</p>
+                        <p className="text-xs" style={{ color: "#9ca3af" }}>{p.status} · {p.progress}%</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {results!.announcements.length > 0 && (
+                <div className="mb-2">
+                  <p className="px-3 py-1 text-xs font-semibold uppercase tracking-wide" style={{ color: "#9ca3af" }}>Announcements</p>
+                  {results!.announcements.map((a) => (
+                    <button key={a.id} onClick={() => go("/announcements")}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors hover:bg-gray-50">
+                      <Megaphone className="w-4 h-4 flex-shrink-0" style={{ color: "#f59e0b" }} />
+                      <p className="text-sm truncate" style={{ color: "#374151" }}>{a.content.slice(0, 80)}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isAuthLoading } = useApp();
@@ -63,8 +215,9 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const {
     currentUser, logout, teams, currentTeamId, setCurrentTeamId, createTeam, currentTeam,
-    searchQuery, setSearchQuery, currentActivities, currentMessages, sendMessage, editMessage,
+    currentActivities, currentMessages, sendMessage, editMessage,
     deleteMessage, loadMessages, chatGroups, createChatGroup, currentMembers,
+    toasts, removeToast,
   } = useApp();
 
   const router = useRouter();
@@ -78,6 +231,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [chatMessage, setChatMessage] = useState("");
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [lastReadNotif, setLastReadNotif] = useState(() => typeof window !== "undefined" ? localStorage.getItem("lastReadNotif") || "" : "");
@@ -88,7 +242,6 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   const [newGroupName, setNewGroupName] = useState("");
   const [newGroupMembers, setNewGroupMembers] = useState<string[]>([]);
 
-  const searchRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -137,7 +290,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); searchRef.current?.focus(); }
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); setSearchModalOpen(true); }
       if (e.key === "Escape") { setNotifOpen(false); setChatOpen(false); setProfileOpen(false); setEditingMsgId(null); }
     };
     window.addEventListener("keydown", h);
@@ -289,14 +442,16 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
           </button>
 
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "#9ca3af" }} />
-            <input ref={searchRef} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search..."
-              className="w-full pl-9 pr-16 py-2 rounded-xl border outline-none transition-all"
-              style={{ background: "#f9f9f6", borderColor: "#e5e5e0", fontSize: "0.875rem", color: "#374151" }}
-              onFocus={(e) => e.target.style.borderColor = "#f59e0b"} onBlur={(e) => e.target.style.borderColor = "#e5e5e0"} />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded text-xs" style={{ background: "#e5e7eb", color: "#6b7280" }}>⌘K</span>
-          </div>
+          {/* Search button → opens GlobalSearchModal */}
+          <button onClick={() => setSearchModalOpen(true)}
+            className="flex items-center gap-2.5 flex-1 max-w-md px-3 py-2 rounded-xl border text-left transition-colors"
+            style={{ background: "#f9f9f6", borderColor: "#e5e5e0" }}
+            onMouseEnter={(e) => e.currentTarget.style.borderColor = "#f59e0b"}
+            onMouseLeave={(e) => e.currentTarget.style.borderColor = "#e5e5e0"}>
+            <Search className="w-4 h-4 flex-shrink-0" style={{ color: "#9ca3af" }} />
+            <span style={{ fontSize: "0.875rem", color: "#9ca3af", flex: 1 }}>Search...</span>
+            <span className="px-1.5 py-0.5 rounded text-xs" style={{ background: "#e5e7eb", color: "#6b7280" }}>⌘K</span>
+          </button>
 
           <div className="flex items-center gap-1 ml-auto">
             {/* Notifications */}
@@ -482,7 +637,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
               <button onClick={() => { setProfileOpen(!profileOpen); setNotifOpen(false); setChatOpen(false); }}
                 className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-colors"
                 onMouseEnter={(e) => e.currentTarget.style.background = "#f3f4f6"}
-                onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+                onMouseLeave={(e) => e.currentTarget.style.background = "transparent">
                 <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ background: getAvatarColor(currentUser?.name || "A") }}>{currentUser?.avatar || "A"}</div>
                 <span className="hidden sm:block" style={{ fontSize: "0.875rem", fontWeight: 500, color: "#374151" }}>{currentUser?.name?.split(" ")[0]}</span>
                 <ChevronDown className="w-3.5 h-3.5 hidden sm:block" style={{ color: "#9ca3af" }} />
@@ -508,6 +663,17 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+
+      {/* Global overlays */}
+      <GlobalSearchModal open={searchModalOpen} onClose={() => setSearchModalOpen(false)} />
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
+
+      <style>{`
+        @keyframes slideInRight {
+          from { transform: translateX(100%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+      `}</style>
     </div>
   );
 }
