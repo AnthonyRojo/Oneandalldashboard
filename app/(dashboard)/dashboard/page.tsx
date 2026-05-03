@@ -1,24 +1,20 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { useApp, Project } from "@/context/AppContext";
-import { FolderOpen, CheckCircle, ListTodo, Users, Plus, Play, Square, Clock, TrendingUp, Video, Zap, Loader2, CalendarDays, AlertCircle, X, Pencil, Trash2, ExternalLink, Save } from "lucide-react";
+import { useState } from "react";
+import { useApp, Project, TaskStatus } from "@/context/AppContext";
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell
+  FolderOpen, CheckCircle, ListTodo, Users, Plus, Clock, TrendingUp,
+  Video, Loader2, CalendarDays, AlertCircle, X, Pencil, Trash2, Save,
+  AlertTriangle, ChevronRight, Zap,
+} from "lucide-react";
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell,
 } from "recharts";
-
-const AVATAR_COLORS = ["#f59e0b", "#3b82f6", "#8b5cf6", "#10b981", "#ec4899", "#f97316"];
-function getAvatarColor(name: string) {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
-}
 
 function formatEventTime(time: string) {
   const [h, m] = time.split(":");
   const hour = parseInt(h);
-  const ampm = hour >= 12 ? "PM" : "AM";
-  return `${hour % 12 || 12}:${m} ${ampm}`;
+  return `${hour % 12 || 12}:${m} ${hour >= 12 ? "PM" : "AM"}`;
 }
 
 function formatEventDate(dateStr: string) {
@@ -38,7 +34,14 @@ const EVENT_TYPE_COLORS: Record<string, { bg: string; color: string; icon: typeo
   Other: { bg: "#f3f4f6", color: "#6b7280", icon: CalendarDays },
 };
 
-// Project Detail Modal
+const STATUS_COLORS: Record<TaskStatus, string> = {
+  todo: "#6b7280", "in-progress": "#3b82f6", review: "#f59e0b", completed: "#22c55e",
+};
+const STATUS_LABELS: Record<TaskStatus, string> = {
+  todo: "To Do", "in-progress": "In Progress", review: "Review", completed: "Done",
+};
+
+// ── Project Detail Modal ───────────────────────────────────────────────────────
 function ProjectDetailModal({ project: initialProject, onClose }: { project: Project; onClose: () => void }) {
   const { currentProjects, currentTasks, updateProject, deleteProject } = useApp();
   const project = currentProjects.find((p) => p.id === initialProject.id) || initialProject;
@@ -50,21 +53,8 @@ function ProjectDetailModal({ project: initialProject, onClose }: { project: Pro
 
   const projectTasks = currentTasks.filter((t) => t.projectId === project.id);
   const doneTasks = projectTasks.filter((t) => t.status === "completed").length;
-  // Calculate progress based on task completion
   const calculatedProgress = projectTasks.length > 0 ? Math.round((doneTasks / projectTasks.length) * 100) : 0;
   const overdue = project.dueDate && project.status !== "completed" && new Date(project.dueDate) < new Date(new Date().toDateString());
-
-  const handleSave = () => {
-    updateProject(project.id, { name: editName, description: editDesc, dueDate: editDue, status: editStatus });
-    setEditMode(false);
-  };
-
-  const handleDelete = () => {
-    if (confirm(`Delete project "${project.name}"? This won&apos;t delete associated tasks.`)) {
-      deleteProject(project.id);
-      onClose();
-    }
-  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -74,18 +64,14 @@ function ProjectDetailModal({ project: initialProject, onClose }: { project: Pro
         <div className="p-6 border-b" style={{ borderColor: "#f0f0ea" }}>
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3 flex-1">
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white text-lg font-bold flex-shrink-0" style={{ background: project.color }}>
-                {project.name[0]}
-              </div>
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white text-lg font-bold flex-shrink-0" style={{ background: project.color }}>{project.name[0]}</div>
               {editMode ? (
                 <input value={editName} onChange={(e) => setEditName(e.target.value)} className="flex-1 px-3 py-2 rounded-xl border outline-none font-semibold text-lg" style={{ borderColor: project.color, color: "#111827" }} />
               ) : (
                 <div>
-                  <h2 style={{ color: "#111827", fontSize: "1.25rem" }}>{project.name}</h2>
+                  <h2 style={{ color: "#111827", fontSize: "1.25rem", fontWeight: 600 }}>{project.name}</h2>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="px-2.5 py-0.5 rounded-full text-xs capitalize" style={{ background: project.status === "completed" ? "#ecfdf5" : "#fffbeb", color: project.status === "completed" ? "#10b981" : "#f59e0b", fontWeight: 600 }}>
-                      {project.status}
-                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full text-xs capitalize" style={{ background: project.status === "completed" ? "#ecfdf5" : "#fffbeb", color: project.status === "completed" ? "#10b981" : "#f59e0b", fontWeight: 600 }}>{project.status}</span>
                     {overdue && <span className="px-2.5 py-0.5 rounded-full text-xs" style={{ background: "#fef2f2", color: "#ef4444", fontWeight: 600 }}>Overdue</span>}
                   </div>
                 </div>
@@ -93,16 +79,16 @@ function ProjectDetailModal({ project: initialProject, onClose }: { project: Pro
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
               <button onClick={() => setEditMode(!editMode)} className="p-2 rounded-xl" style={{ color: editMode ? "#f59e0b" : "#9ca3af" }}><Pencil className="w-4 h-4" /></button>
-              <button onClick={handleDelete} className="p-2 rounded-xl" style={{ color: "#ef4444" }}><Trash2 className="w-4 h-4" /></button>
+              <button onClick={() => { if (confirm(`Delete "${project.name}"?`)) { deleteProject(project.id); onClose(); } }} className="p-2 rounded-xl" style={{ color: "#ef4444" }}><Trash2 className="w-4 h-4" /></button>
               <button onClick={onClose} className="p-2 rounded-xl" style={{ color: "#9ca3af" }}><X className="w-5 h-5" /></button>
             </div>
           </div>
         </div>
-        {editMode && (
+        {editMode ? (
           <div className="p-6 space-y-4">
             <div>
               <label className="text-sm font-medium" style={{ color: "#374151" }}>Description</label>
-              <textarea value={editDesc} onChange={(e) => setEditDesc(e.target.value)} className="w-full mt-1 px-3 py-2 rounded-xl border outline-none" rows={3} style={{ borderColor: "#e5e7eb", fontSize: "0.875rem" }} placeholder="Add project description..." />
+              <textarea value={editDesc} onChange={(e) => setEditDesc(e.target.value)} className="w-full mt-1 px-3 py-2 rounded-xl border outline-none" rows={3} style={{ borderColor: "#e5e7eb", fontSize: "0.875rem" }} />
             </div>
             <div className="flex gap-4">
               <div className="flex-1">
@@ -112,21 +98,20 @@ function ProjectDetailModal({ project: initialProject, onClose }: { project: Pro
               <div className="flex-1">
                 <label className="text-sm font-medium" style={{ color: "#374151" }}>Status</label>
                 <select value={editStatus} onChange={(e) => setEditStatus(e.target.value as "active" | "completed")} className="w-full mt-1 px-3 py-2 rounded-xl border outline-none" style={{ borderColor: "#e5e7eb", fontSize: "0.875rem" }}>
-                  <option value="active">Active</option>
-                  <option value="completed">Completed</option>
+                  <option value="active">Active</option><option value="completed">Completed</option>
                 </select>
               </div>
             </div>
-            <button onClick={handleSave} className="w-full py-2.5 rounded-xl flex items-center justify-center gap-2" style={{ background: "#f59e0b", color: "#111827", fontWeight: 600 }}>
+            <button onClick={() => { updateProject(project.id, { name: editName, description: editDesc, dueDate: editDue, status: editStatus }); setEditMode(false); }}
+              className="w-full py-2.5 rounded-xl flex items-center justify-center gap-2" style={{ background: "#f59e0b", color: "#111827", fontWeight: 600 }}>
               <Save className="w-4 h-4" /> Save Changes
             </button>
           </div>
-        )}
-        {!editMode && (
+        ) : (
           <div className="p-6 space-y-6">
             {project.description && <p style={{ color: "#6b7280", fontSize: "0.875rem", lineHeight: 1.6 }}>{project.description}</p>}
-            <div className="space-y-3">
-              <div className="flex justify-between text-sm"><span style={{ color: "#6b7280" }}>Progress</span><span style={{ color: "#111827", fontWeight: 600 }}>{calculatedProgress}%</span></div>
+            <div>
+              <div className="flex justify-between text-sm mb-1"><span style={{ color: "#6b7280" }}>Progress</span><span style={{ color: "#111827", fontWeight: 600 }}>{calculatedProgress}%</span></div>
               <div className="h-2 rounded-full overflow-hidden" style={{ background: "#e5e7eb" }}>
                 <div className="h-full rounded-full transition-all" style={{ width: `${calculatedProgress}%`, background: project.color }} />
               </div>
@@ -138,7 +123,7 @@ function ProjectDetailModal({ project: initialProject, onClose }: { project: Pro
               </div>
               <div className="p-4 rounded-xl" style={{ background: "#f9f9f6" }}>
                 <p style={{ color: "#6b7280", fontSize: "0.75rem", marginBottom: 4 }}>Due Date</p>
-                <p style={{ color: overdue ? "#ef4444" : "#111827", fontSize: "1.25rem", fontWeight: 700 }}>{project.dueDate ? new Date(project.dueDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "-"}</p>
+                <p style={{ color: overdue ? "#ef4444" : "#111827", fontSize: "1.25rem", fontWeight: 700 }}>{project.dueDate ? new Date(project.dueDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "–"}</p>
               </div>
             </div>
           </div>
@@ -148,7 +133,7 @@ function ProjectDetailModal({ project: initialProject, onClose }: { project: Pro
   );
 }
 
-// Add Project Modal
+// ── Add Project Modal ──────────────────────────────────────────────────────────
 function AddProjectModal({ onClose }: { onClose: () => void }) {
   const { addProject } = useApp();
   const [name, setName] = useState("");
@@ -156,22 +141,7 @@ function AddProjectModal({ onClose }: { onClose: () => void }) {
   const [dueDate, setDueDate] = useState("");
   const [color, setColor] = useState("#f59e0b");
   const [loading, setLoading] = useState(false);
-
-  const colors = ["#f59e0b", "#3b82f6", "#8b5cf6", "#10b981", "#ec4899", "#f97316", "#06b6d4", "#84cc16"];
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) return;
-    setLoading(true);
-    try {
-      await addProject({ name: name.trim(), description, dueDate, color, status: "active", progress: 0 });
-      onClose();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const COLORS = ["#f59e0b", "#3b82f6", "#8b5cf6", "#10b981", "#ec4899", "#f97316", "#06b6d4", "#84cc16"];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -183,43 +153,64 @@ function AddProjectModal({ onClose }: { onClose: () => void }) {
             <button onClick={onClose} className="p-2 rounded-xl" style={{ color: "#9ca3af" }}><X className="w-5 h-5" /></button>
           </div>
         </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <div className="p-6 space-y-4">
           <div>
             <label className="text-sm font-medium" style={{ color: "#374151" }}>Project Name</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} className="w-full mt-1 px-3 py-2.5 rounded-xl border outline-none" style={{ borderColor: "#e5e7eb", fontSize: "0.875rem" }} placeholder="Enter project name" autoFocus />
+            <input value={name} onChange={(e) => setName(e.target.value)} className="w-full mt-1 px-3 py-2.5 rounded-xl border outline-none" style={{ borderColor: "#e5e7eb" }} placeholder="Enter project name" autoFocus />
           </div>
           <div>
             <label className="text-sm font-medium" style={{ color: "#374151" }}>Description</label>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="w-full mt-1 px-3 py-2 rounded-xl border outline-none" rows={3} style={{ borderColor: "#e5e7eb", fontSize: "0.875rem" }} placeholder="Add project description..." />
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="w-full mt-1 px-3 py-2 rounded-xl border outline-none" rows={3} style={{ borderColor: "#e5e7eb" }} placeholder="Add description..." />
           </div>
           <div>
             <label className="text-sm font-medium" style={{ color: "#374151" }}>Due Date</label>
-            <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="w-full mt-1 px-3 py-2.5 rounded-xl border outline-none" style={{ borderColor: "#e5e7eb", fontSize: "0.875rem" }} />
+            <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="w-full mt-1 px-3 py-2.5 rounded-xl border outline-none" style={{ borderColor: "#e5e7eb" }} />
           </div>
           <div>
             <label className="text-sm font-medium" style={{ color: "#374151" }}>Color</label>
             <div className="flex gap-2 mt-2">
-              {colors.map((c) => (
-                <button key={c} type="button" onClick={() => setColor(c)} className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: c, border: color === c ? "3px solid #111827" : "none" }}>
+              {COLORS.map((c) => (
+                <button key={c} onClick={() => setColor(c)} className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: c, border: color === c ? "3px solid #111827" : "none" }}>
                   {color === c && <CheckCircle className="w-4 h-4 text-white" />}
                 </button>
               ))}
             </div>
           </div>
-          <button type="submit" disabled={loading || !name.trim()} className="w-full py-3 rounded-xl flex items-center justify-center gap-2" style={{ background: loading ? "#d97706" : "#f59e0b", color: "#111827", fontWeight: 600, opacity: loading || !name.trim() ? 0.7 : 1 }}>
+          <button
+            onClick={async () => { if (!name.trim()) return; setLoading(true); try { await addProject({ name: name.trim(), description, dueDate, color, status: "active", progress: 0 }); onClose(); } finally { setLoading(false); } }}
+            disabled={loading || !name.trim()}
+            className="w-full py-3 rounded-xl flex items-center justify-center gap-2"
+            style={{ background: "#f59e0b", color: "#111827", fontWeight: 600, opacity: loading || !name.trim() ? 0.7 : 1 }}>
             {loading && <Loader2 className="w-4 h-4 animate-spin" />}
             {loading ? "Creating..." : "Create Project"}
           </button>
-        </form>
+        </div>
       </div>
     </div>
   );
 }
 
+// ── Dashboard Page ─────────────────────────────────────────────────────────────
 export default function DashboardPage() {
-  const { currentProjects, currentTasks, currentMembers, currentEvents, currentActivities, isDataLoading } = useApp();
+  const { currentProjects, currentTasks, currentMembers, currentEvents, currentActivities, isDataLoading, addTask, currentUser } = useApp();
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [addProjectOpen, setAddProjectOpen] = useState(false);
+  const [quickTaskTitle, setQuickTaskTitle] = useState("");
+  const [quickTaskLoading, setQuickTaskLoading] = useState(false);
+
+  const now = new Date();
+  const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  const overdueTasks = currentTasks.filter((t) => {
+    if (!t.dueDate || t.status === "completed") return false;
+    return new Date(t.dueDate) < now;
+  });
+
+  const dueThisWeekTasks = currentTasks.filter((t) => {
+    if (!t.dueDate || t.status === "completed") return false;
+    const due = new Date(t.dueDate);
+    return due >= now && due <= weekFromNow;
+  }).sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime());
 
   const activeProjects = currentProjects.filter((p) => p.status === "active");
   const completedTasks = currentTasks.filter((t) => t.status === "completed").length;
@@ -232,25 +223,49 @@ export default function DashboardPage() {
     { label: "Team Members", value: currentMembers.length, icon: Users, color: "#8b5cf6", bgColor: "#f5f3ff" },
   ];
 
-  // Chart data
   const tasksByDay = Array.from({ length: 7 }, (_, i) => {
     const date = new Date();
     date.setDate(date.getDate() - (6 - i));
     const dayStr = date.toISOString().split("T")[0];
-    const tasks = currentTasks.filter((t) => t.createdAt?.startsWith(dayStr)).length;
-    return { day: date.toLocaleDateString("en-US", { weekday: "short" }), tasks };
+    return { day: date.toLocaleDateString("en-US", { weekday: "short" }), tasks: currentTasks.filter((t) => t.createdAt?.startsWith(dayStr)).length };
   });
 
   const projectProgress = currentProjects.slice(0, 5).map((p) => {
     const pTasks = currentTasks.filter((t) => t.projectId === p.id);
     const pDone = pTasks.filter((t) => t.status === "completed").length;
-    const calcProgress = pTasks.length > 0 ? Math.round((pDone / pTasks.length) * 100) : 0;
-    return { name: p.name.slice(0, 12), progress: calcProgress, color: p.color };
+    return { name: p.name.slice(0, 14), progress: pTasks.length > 0 ? Math.round((pDone / pTasks.length) * 100) : 0, color: p.color };
   });
 
-  const upcomingEvents = [...currentEvents].filter((e) => new Date(e.date) >= new Date(new Date().toDateString())).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).slice(0, 4);
+  const upcomingEvents = [...currentEvents]
+    .filter((e) => new Date(e.date) >= new Date(new Date().toDateString()))
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .slice(0, 4);
 
-  const recentActivities = [...currentActivities].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
+  const recentActivities = [...currentActivities]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 5);
+
+  const handleQuickAdd = async () => {
+    if (!quickTaskTitle.trim()) return;
+    setQuickTaskLoading(true);
+    try {
+      await addTask({
+        title: quickTaskTitle.trim(),
+        description: "",
+        priority: "Medium",
+        status: "todo",
+        assigneeIds: currentUser?.id ? [currentUser.id] : [],
+        projectId: "",
+        dueDate: "",
+        tags: [],
+        submittedLink: "",
+        approverId: "",
+      });
+      setQuickTaskTitle("");
+    } finally {
+      setQuickTaskLoading(false);
+    }
+  };
 
   if (isDataLoading && currentProjects.length === 0) {
     return (
@@ -265,6 +280,32 @@ export default function DashboardPage() {
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
+      {/* Quick-add task */}
+      <div className="bg-white rounded-2xl border p-4" style={{ borderColor: "#f0f0ea" }}>
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "#fffbeb" }}>
+            <Zap className="w-4 h-4" style={{ color: "#f59e0b" }} />
+          </div>
+          <input
+            value={quickTaskTitle}
+            onChange={(e) => setQuickTaskTitle(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleQuickAdd()}
+            placeholder="Quick-add a task... (press Enter)"
+            className="flex-1 outline-none text-sm"
+            style={{ color: "#374151", background: "transparent" }}
+          />
+          <button
+            onClick={handleQuickAdd}
+            disabled={!quickTaskTitle.trim() || quickTaskLoading}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium flex-shrink-0"
+            style={{ background: quickTaskTitle.trim() ? "#f59e0b" : "#f3f4f6", color: quickTaskTitle.trim() ? "#111827" : "#9ca3af" }}
+          >
+            {quickTaskLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+            Add Task
+          </button>
+        </div>
+      </div>
+
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((s) => (
@@ -281,6 +322,67 @@ export default function DashboardPage() {
           </div>
         ))}
       </div>
+
+      {/* Overdue + Due This Week */}
+      {(overdueTasks.length > 0 || dueThisWeekTasks.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Overdue */}
+          {overdueTasks.length > 0 && (
+            <div className="rounded-2xl border overflow-hidden" style={{ borderColor: "#fca5a5", background: "#fff5f5" }}>
+              <div className="flex items-center gap-2 px-5 py-3.5 border-b" style={{ borderColor: "#fca5a5" }}>
+                <AlertTriangle className="w-4 h-4" style={{ color: "#ef4444" }} />
+                <h3 className="font-semibold text-sm" style={{ color: "#dc2626" }}>Overdue · {overdueTasks.length}</h3>
+              </div>
+              <div className="divide-y" style={{ borderColor: "#fecaca" }}>
+                {overdueTasks.slice(0, 5).map((t) => (
+                  <div key={t.id} className="flex items-center gap-3 px-5 py-3">
+                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: "#ef4444" }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate" style={{ color: "#111827" }}>{t.title}</p>
+                      <p className="text-xs" style={{ color: "#ef4444" }}>
+                        Due {new Date(t.dueDate!).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </p>
+                    </div>
+                    <span className="text-xs px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: "#fee2e2", color: "#dc2626" }}>{t.priority}</span>
+                  </div>
+                ))}
+                {overdueTasks.length > 5 && (
+                  <div className="px-5 py-3">
+                    <p className="text-xs" style={{ color: "#ef4444" }}>+{overdueTasks.length - 5} more overdue</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Due This Week */}
+          {dueThisWeekTasks.length > 0 && (
+            <div className="bg-white rounded-2xl border overflow-hidden" style={{ borderColor: "#f0f0ea" }}>
+              <div className="flex items-center gap-2 px-5 py-3.5 border-b" style={{ borderColor: "#f0f0ea" }}>
+                <Clock className="w-4 h-4" style={{ color: "#f59e0b" }} />
+                <h3 className="font-semibold text-sm" style={{ color: "#111827" }}>Due This Week · {dueThisWeekTasks.length}</h3>
+              </div>
+              <div className="divide-y" style={{ borderColor: "#f0f0ea" }}>
+                {dueThisWeekTasks.slice(0, 5).map((t) => {
+                  const daysLeft = Math.ceil((new Date(t.dueDate!).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                  return (
+                    <div key={t.id} className="flex items-center gap-3 px-5 py-3">
+                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: STATUS_COLORS[t.status] }} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate" style={{ color: "#111827" }}>{t.title}</p>
+                        <p className="text-xs" style={{ color: "#6b7280" }}>
+                          {daysLeft === 0 ? "Today" : daysLeft === 1 ? "Tomorrow" : `In ${daysLeft} days`} · {STATUS_LABELS[t.status]}
+                        </p>
+                      </div>
+                      <span className="text-xs px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: "#f3f4f6", color: "#6b7280" }}>{t.priority}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -306,21 +408,25 @@ export default function DashboardPage() {
         </div>
         <div className="bg-white rounded-2xl p-6 border" style={{ borderColor: "#f0f0ea" }}>
           <h3 style={{ color: "#111827", fontWeight: 600, marginBottom: 16 }}>Project Progress</h3>
-          <div style={{ height: 200 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={projectProgress} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0ea" />
-                <XAxis type="number" domain={[0, 100]} axisLine={false} tickLine={false} tick={{ fill: "#9ca3af", fontSize: 12 }} />
-                <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#374151", fontSize: 12 }} width={80} />
-                <Tooltip contentStyle={{ background: "white", border: "1px solid #f0f0ea", borderRadius: 12, fontSize: 13 }} />
-                <Bar dataKey="progress" radius={[0, 4, 4, 0]}>
-                  {projectProgress.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          {projectProgress.length > 0 ? (
+            <div style={{ height: 200 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={projectProgress} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f0f0ea" />
+                  <XAxis type="number" domain={[0, 100]} axisLine={false} tickLine={false} tick={{ fill: "#9ca3af", fontSize: 12 }} />
+                  <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#374151", fontSize: 12 }} width={90} />
+                  <Tooltip contentStyle={{ background: "white", border: "1px solid #f0f0ea", borderRadius: 12, fontSize: 13 }} />
+                  <Bar dataKey="progress" radius={[0, 4, 4, 0]}>
+                    {projectProgress.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-48">
+              <p style={{ color: "#9ca3af", fontSize: "0.875rem" }}>No projects yet</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -333,26 +439,34 @@ export default function DashboardPage() {
             <button onClick={() => setAddProjectOpen(true)} className="p-2 rounded-xl" style={{ color: "#f59e0b" }}><Plus className="w-4 h-4" /></button>
           </div>
           <div className="divide-y" style={{ borderColor: "#f0f0ea" }}>
-            {currentProjects.slice(0, 5).map((p) => {
+            {currentProjects.slice(0, 6).map((p) => {
               const pTasks = currentTasks.filter((t) => t.projectId === p.id);
               const pDone = pTasks.filter((t) => t.status === "completed").length;
               const pProgress = pTasks.length > 0 ? Math.round((pDone / pTasks.length) * 100) : 0;
               return (
                 <button key={p.id} onClick={() => setSelectedProject(p)} className="w-full text-left px-6 py-4 flex items-center gap-3 hover:bg-gray-50 transition-colors">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold" style={{ background: p.color }}>{p.name[0]}</div>
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold flex-shrink-0" style={{ background: p.color }}>{p.name[0]}</div>
                   <div className="flex-1 min-w-0">
                     <p className="truncate" style={{ color: "#111827", fontWeight: 500 }}>{p.name}</p>
                     <div className="flex items-center gap-2 mt-1">
                       <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "#e5e7eb" }}>
                         <div className="h-full rounded-full" style={{ width: `${pProgress}%`, background: p.color }} />
                       </div>
-                      <span style={{ color: "#6b7280", fontSize: "0.75rem" }}>{pProgress}%</span>
+                      <span style={{ color: "#6b7280", fontSize: "0.75rem", flexShrink: 0 }}>{pProgress}%</span>
                     </div>
                   </div>
+                  <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: "#d1d5db" }} />
                 </button>
               );
             })}
-            {currentProjects.length === 0 && <p className="px-6 py-8 text-center" style={{ color: "#9ca3af", fontSize: "0.875rem" }}>No projects yet</p>}
+            {currentProjects.length === 0 && (
+              <div className="px-6 py-8 text-center">
+                <p style={{ color: "#9ca3af", fontSize: "0.875rem" }}>No projects yet</p>
+                <button onClick={() => setAddProjectOpen(true)} className="mt-3 flex items-center gap-1.5 mx-auto text-sm font-medium" style={{ color: "#f59e0b" }}>
+                  <Plus className="w-4 h-4" /> Create project
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -372,7 +486,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="truncate" style={{ color: "#111827", fontWeight: 500, fontSize: "0.875rem" }}>{e.title}</p>
-                    <p style={{ color: "#6b7280", fontSize: "0.75rem", marginTop: 2 }}>{formatEventDate(e.date)} • {formatEventTime(e.startTime)}</p>
+                    <p style={{ color: "#6b7280", fontSize: "0.75rem", marginTop: 2 }}>{formatEventDate(e.date)} · {formatEventTime(e.startTime)}</p>
                   </div>
                 </div>
               );
