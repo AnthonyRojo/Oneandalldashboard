@@ -295,7 +295,7 @@ export default function TasksPage() {
           {/* Status icon — clickable for inline status change */}
           <div
             className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 relative hover:ring-2 hover:ring-offset-1"
-            style={{ background: `${STATUS_CONFIG[task.status].color}20`, ringColor: STATUS_CONFIG[task.status].color }}
+            style={{ background: `${STATUS_CONFIG[task.status].color}20` }}
             onClick={(e) => handleInlineStatus(e, task.id)}
             title="Change status"
           >
