@@ -637,7 +637,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
               <button onClick={() => { setProfileOpen(!profileOpen); setNotifOpen(false); setChatOpen(false); }}
                 className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-colors"
                 onMouseEnter={(e) => e.currentTarget.style.background = "#f3f4f6"}
-                onMouseLeave={(e) => e.currentTarget.style.background = "transparent">
+                onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
                 <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ background: getAvatarColor(currentUser?.name || "A") }}>{currentUser?.avatar || "A"}</div>
                 <span className="hidden sm:block" style={{ fontSize: "0.875rem", fontWeight: 500, color: "#374151" }}>{currentUser?.name?.split(" ")[0]}</span>
                 <ChevronDown className="w-3.5 h-3.5 hidden sm:block" style={{ color: "#9ca3af" }} />
