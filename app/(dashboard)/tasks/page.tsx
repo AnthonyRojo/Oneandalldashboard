@@ -302,23 +302,26 @@ export default function TasksPage() {
             <StatusIcon className="w-3.5 h-3.5" style={{ color: STATUS_CONFIG[task.status].color }} />
             {inlineStatusTaskId === task.id && (
               <div className="absolute top-full left-0 mt-1 bg-white border rounded-xl shadow-xl z-20 min-w-[150px]" style={{ borderColor: "#e5e7eb" }}>
-                {STATUSES.map((s) => (
-                  <button
-                    key={s}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 first:rounded-t-xl last:rounded-b-xl"
-                    style={{ color: STATUS_CONFIG[s].color, fontWeight: task.status === s ? 600 : 400 }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      updateTask(task.id, { status: s });
-                      if (selectedTask?.id === task.id) setSelectedTask({ ...selectedTask, status: s });
-                      closeInline();
-                    }}
-                  >
-                    <STATUS_CONFIG[s].icon className="w-3.5 h-3.5" />
-                    {STATUS_CONFIG[s].label}
-                    {task.status === s && <Check className="w-3 h-3 ml-auto" />}
-                  </button>
-                ))}
+                {STATUSES.map((s) => {
+                  const SIcon = STATUS_CONFIG[s].icon;
+                  return (
+                    <button
+                      key={s}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 first:rounded-t-xl last:rounded-b-xl"
+                      style={{ color: STATUS_CONFIG[s].color, fontWeight: task.status === s ? 600 : 400 }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        updateTask(task.id, { status: s });
+                        if (selectedTask?.id === task.id) setSelectedTask({ ...selectedTask, status: s });
+                        closeInline();
+                      }}
+                    >
+                      <SIcon className="w-3.5 h-3.5" />
+                      {STATUS_CONFIG[s].label}
+                      {task.status === s && <Check className="w-3 h-3 ml-auto" />}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
