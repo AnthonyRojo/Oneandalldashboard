@@ -358,7 +358,7 @@ export default function TasksPage() {
                   </div>
                 )}
               </span>
-              {task.submissionStatus && task.submissionStatus !== "none" && (
+              {(task.submissionStatus === "pending" || task.submissionStatus === "approved" || task.submissionStatus === "rejected") && (
                 <span
                   className="px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0"
                   style={{
