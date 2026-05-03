@@ -30,13 +30,17 @@ export default function AnalyticsPage() {
   const memberStats = useMemo(() => {
     const stats = currentMembers.map((member) => {
       const memberTasks = currentTasks.filter((t) => {
-        const isAssignedViaId = t.assigneeId === member.id;
-        const isAssignedViaIds = Array.isArray(t.assigneeIds) && t.assigneeIds.includes(member.id);
+        // Tasks store assignees as profile UUIDs (member.userId), not team_member record UUIDs (member.id)
+        const isAssignedViaId = t.assigneeId === member.id || (member.userId && t.assigneeId === member.userId);
+        const isAssignedViaIds = Array.isArray(t.assigneeIds) && (
+          t.assigneeIds.includes(member.id) ||
+          Boolean(member.userId && t.assigneeIds.includes(member.userId))
+        );
         return isAssignedViaId || isAssignedViaIds;
       });
       const completedTasks = memberTasks.filter((t) => (t.status as string)?.toLowerCase() === "completed").length;
-      const memberActivities = currentActivities.filter((a) => a.userId === member.id || a.userId === member.id);
-      
+      const memberActivities = currentActivities.filter((a) => a.userId === member.id || (member.userId && a.userId === member.userId));
+
       return {
         ...member,
         totalTasks: memberTasks.length,
@@ -45,7 +49,7 @@ export default function AnalyticsPage() {
         recentAction: memberActivities[0]?.action || "No recent activity"
       };
     }).sort((a, b) => b.totalTasks - a.totalTasks);
-    
+
     return stats;
   }, [currentMembers, currentTasks, currentActivities]);
 
@@ -121,26 +125,58 @@ export default function AnalyticsPage() {
               {memberStats.map((member) => (
                 <div key={member.id} className="p-4 rounded-xl" style={{ background: "#f9fafb", borderColor: "#e5e7eb", border: "1px solid" }}>
                   <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <p className="font-medium" style={{ color: "#111827" }}>{member.name}</p>
-                      <p className="text-xs" style={{ color: "#6b7280" }}>{member.email}</p>
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                        style={{ background: "#e0e7ff", color: "#4338ca" }}
+                      >
+                        {member.name.slice(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-medium text-sm" style={{ color: "#111827" }}>{member.name}</p>
+                        <p className="text-xs" style={{ color: "#9ca3af" }}>{member.role}</p>
+                      </div>
                     </div>
                     <div className="text-right">
                       <p className="text-lg font-semibold" style={{ color: "#111827" }}>{member.totalTasks}</p>
-                      <p className="text-xs" style={{ color: "#22c55e" }}>{member.completedTasks} completed</p>
+                      <p className="text-xs font-medium" style={{ color: "#22c55e" }}>{member.completedTasks} done</p>
                     </div>
                   </div>
+                  {member.totalTasks > 0 && (
+                    <div className="mb-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs" style={{ color: "#6b7280" }}>Completion</span>
+                        <span className="text-xs font-semibold" style={{ color: "#374151" }}>
+                          {Math.round((member.completedTasks / member.totalTasks) * 100)}%
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full" style={{ background: "#e5e7eb" }}>
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{
+                            width: `${Math.round((member.completedTasks / member.totalTasks) * 100)}%`,
+                            background: member.completedTasks === member.totalTasks ? "#22c55e" : "#3b82f6"
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
                   <div className="flex flex-wrap gap-1">
                     {currentTasks
-                      .filter((t) => (t.assigneeId === member.id || t.assigneeId === member.id || t.assigneeIds?.includes(member.id) || t.assigneeIds?.includes(member.id)))
+                      .filter((t) =>
+                        t.assigneeId === member.id ||
+                        (member.userId && t.assigneeId === member.userId) ||
+                        t.assigneeIds?.includes(member.id) ||
+                        (member.userId && t.assigneeIds?.includes(member.userId))
+                      )
                       .slice(0, 3)
                       .map((task) => (
-                        <span key={task.id} className="px-2 py-1 rounded-full text-xs" style={{ background: "#f3f4f6", color: "#374151" }}>
-                          {task.title.slice(0, 20)}...
+                        <span key={task.id} className="px-2 py-0.5 rounded-full text-xs" style={{ background: "#e0e7ff", color: "#4338ca" }}>
+                          {task.title.length > 22 ? task.title.slice(0, 22) + "…" : task.title}
                         </span>
                       ))}
                     {member.totalTasks > 3 && (
-                      <span className="px-2 py-1 text-xs" style={{ color: "#6b7280" }}>+{member.totalTasks - 3} more</span>
+                      <span className="px-2 py-0.5 text-xs rounded-full" style={{ background: "#f3f4f6", color: "#6b7280" }}>+{member.totalTasks - 3} more</span>
                     )}
                   </div>
                 </div>
