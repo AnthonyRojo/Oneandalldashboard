@@ -551,14 +551,14 @@ export default function AIPage() {
           {/* Knowledge Base — persistent, team-wide */}
           <div>
             <p className="px-2 mb-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: "#9ca3af" }}>Knowledge Base</p>
-            <input ref={kbFileInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleKbUpload} />
+            <input ref={kbFileInputRef} type="file" accept=".pdf,.md,.txt,text/plain,text/markdown,application/pdf" className="hidden" onChange={handleKbUpload} />
             <button onClick={() => kbFileInputRef.current?.click()} disabled={kbUploading}
               className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left transition-colors hover:bg-gray-50"
               style={{ color: kbUploading ? "#9ca3af" : "#6b7280", border: "1px dashed #d1d5db" }}>
               {kbUploading
                 ? <Loader2 className="w-3.5 h-3.5 flex-shrink-0 animate-spin" />
                 : <Plus className="w-3.5 h-3.5 flex-shrink-0" />}
-              <span className="text-xs">{kbUploading ? "Uploading…" : "Upload PDF"}</span>
+              <span className="text-xs">{kbUploading ? "Uploading…" : "Upload PDF / MD / TXT"}</span>
             </button>
             {kbError && (
               <p className="px-2 mt-1" style={{ color: "#ef4444", fontSize: "0.65rem" }}>{kbError}</p>
