@@ -1,14 +1,8 @@
 import { NextRequest } from "next/server";
-import { createRequire } from "module";
 import {
   getSupabaseAdmin, getAuthUser,
   unauthorized, badRequest, serverError, success,
 } from "@/lib/api-helpers";
-
-const require = createRequire(import.meta.url);
-const pdfParse = require("pdf-parse") as (
-  buf: Buffer
-) => Promise<{ text: string; numpages: number }>;
 
 // GET /api/teams/[teamId]/knowledge-base
 export async function GET(
@@ -27,7 +21,10 @@ export async function GET(
     .eq("team_id", teamId)
     .order("created_at", { ascending: false });
 
-  if (error) return serverError(error.message);
+  if (error) {
+    console.error("KB GET error:", error.message);
+    return serverError(error.message);
+  }
   return success({ files: data ?? [] });
 }
 
@@ -58,13 +55,21 @@ export async function POST(
   let content: string;
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
+    // Dynamic import keeps pdf-parse out of module init — safer in serverless
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pdfParse = require("pdf-parse") as (
+      buf: Buffer
+    ) => Promise<{ text: string; numpages: number }>;
     const parsed = await pdfParse(buffer);
     content = parsed.text.trim();
-  } catch {
-    return serverError("Failed to extract text from PDF.");
+  } catch (err) {
+    console.error("PDF parse error:", err);
+    return serverError("Failed to extract text from PDF. Make sure the file is not corrupted or image-only.");
   }
 
-  if (!content) return badRequest("Could not extract any text from this PDF. Make sure it is not image-only.");
+  if (!content) {
+    return badRequest("No text could be extracted. The PDF may be image-only (scanned). Try a text-based PDF.");
+  }
 
   const tokenEstimate = Math.ceil(content.length / 4);
   const supabase = getSupabaseAdmin();
@@ -82,6 +87,9 @@ export async function POST(
     .select("id, name, file_size, token_estimate, created_at")
     .single();
 
-  if (error) return serverError(error.message);
+  if (error) {
+    console.error("KB insert error:", error.message);
+    return serverError(error.message);
+  }
   return success({ file: data });
 }
