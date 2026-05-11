@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { GoogleGenAI } from "@google/genai";
 import { getSupabaseAdmin } from "@/lib/api-helpers";
 
 type Message = { role: string; content: string };
@@ -33,26 +34,20 @@ async function callGemini(
   system: string,
   apiKey: string
 ): Promise<string> {
+  const ai = new GoogleGenAI({ apiKey });
   const contents = messages.map((m) => ({
     role: m.role === "assistant" ? "model" : "user",
     parts: [{ text: m.content }],
   }));
-
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: system }] },
-        contents,
-        generationConfig: { maxOutputTokens: 1024 },
-      }),
-    }
-  );
-  if (!res.ok) throw new Error(`Gemini ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents,
+    config: {
+      systemInstruction: system,
+      maxOutputTokens: 1024,
+    },
+  });
+  return response.text ?? "";
 }
 
 export async function POST(request: NextRequest) {
