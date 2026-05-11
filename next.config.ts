@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // No rewrites needed - API calls go directly to Supabase functions
+  serverExternalPackages: ["pdf-parse"],
 };
 
 export default nextConfig;

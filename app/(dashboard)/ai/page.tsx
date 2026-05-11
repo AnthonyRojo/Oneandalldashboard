@@ -1,17 +1,26 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Sparkles, Send, Loader2, RotateCcw, Copy, Check,
   Paperclip, X, FileText, Layers, CheckSquare, Megaphone,
-  ClipboardList, PenTool, BarChart2, Plus,
+  ClipboardList, PenTool, BarChart2, Plus, BookOpen, Trash2,
 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
+import { api } from "@/lib/api";
 
 interface UploadedFile {
   id: string;
   name: string;
   content: string;
+}
+
+interface KnowledgeBaseFile {
+  id: string;
+  name: string;
+  file_size: number;
+  token_estimate: number;
+  created_at: string;
 }
 
 interface Message {
@@ -178,22 +187,38 @@ function AgentButton({
 }
 
 export default function AIPage() {
-  const { currentUser } = useApp();
+  const { currentUser, currentTeamId, accessToken } = useApp();
   const [activeAgentId, setActiveAgentId] = useState("hub");
   const [conversations, setConversations] = useState<Record<string, Message[]>>({});
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [kbFiles, setKbFiles] = useState<KnowledgeBaseFile[]>([]);
+  const [kbUploading, setKbUploading] = useState(false);
+  const [kbError, setKbError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const kbFileInputRef = useRef<HTMLInputElement>(null);
 
   const activeAgent = AGENTS.find((a) => a.id === activeAgentId) ?? AGENTS[0];
   const AgentIcon = activeAgent.icon;
   const messages = conversations[activeAgentId] ?? [];
   const isEmpty = messages.length === 0;
   const activeCount = Object.values(conversations).filter((m) => m.length > 0).length;
+
+  const fetchKb = useCallback(async () => {
+    if (!currentTeamId || !accessToken) return;
+    try {
+      const res = await api.getKnowledgeBase(currentTeamId, accessToken);
+      setKbFiles(res.files ?? []);
+    } catch {
+      // Non-fatal
+    }
+  }, [currentTeamId, accessToken]);
+
+  useEffect(() => { fetchKb(); }, [fetchKb]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -217,7 +242,12 @@ export default function AIPage() {
       const res = await fetch("/api/ai", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ messages: newMessages, systemPrompt: activeAgent.systemPrompt, fileContext }),
+        body: JSON.stringify({
+          messages: newMessages,
+          systemPrompt: activeAgent.systemPrompt,
+          fileContext,
+          teamId: currentTeamId,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong.");
@@ -254,6 +284,38 @@ export default function AIPage() {
     });
     e.target.value = "";
   };
+
+  const handleKbUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !currentTeamId || !accessToken) return;
+    setKbUploading(true);
+    setKbError(null);
+    try {
+      await api.uploadKnowledgeBaseFile(currentTeamId, file, accessToken);
+      await fetchKb();
+    } catch (err) {
+      setKbError(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setKbUploading(false);
+    }
+  };
+
+  const deleteKbFile = async (fileId: string) => {
+    if (!currentTeamId || !accessToken) return;
+    try {
+      await api.deleteKnowledgeBaseFile(currentTeamId, fileId, accessToken);
+      setKbFiles((prev) => prev.filter((f) => f.id !== fileId));
+    } catch {
+      // Non-fatal
+    }
+  };
+
+  function formatBytes(bytes: number) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
 
   return (
     <div className="flex h-full">
@@ -302,9 +364,50 @@ export default function AIPage() {
             ))}
           </div>
 
-          {/* Files */}
+          {/* Knowledge Base — persistent, team-wide */}
           <div>
-            <p className="px-2 mb-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: "#9ca3af" }}>Files</p>
+            <p className="px-2 mb-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: "#9ca3af" }}>Knowledge Base</p>
+            <input ref={kbFileInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleKbUpload} />
+            <button onClick={() => kbFileInputRef.current?.click()} disabled={kbUploading}
+              className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left transition-colors hover:bg-gray-50"
+              style={{ color: kbUploading ? "#9ca3af" : "#6b7280", border: "1px dashed #d1d5db" }}>
+              {kbUploading
+                ? <Loader2 className="w-3.5 h-3.5 flex-shrink-0 animate-spin" />
+                : <Plus className="w-3.5 h-3.5 flex-shrink-0" />}
+              <span className="text-xs">{kbUploading ? "Uploading…" : "Upload PDF"}</span>
+            </button>
+            {kbError && (
+              <p className="px-2 mt-1" style={{ color: "#ef4444", fontSize: "0.65rem" }}>{kbError}</p>
+            )}
+            {kbFiles.length > 0 && (
+              <div className="mt-2 flex flex-col gap-1">
+                {kbFiles.map((file) => (
+                  <div key={file.id} className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg group"
+                    style={{ background: "#f0fdf4" }}>
+                    <BookOpen className="w-3 h-3 flex-shrink-0" style={{ color: "#22c55e" }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs truncate" style={{ color: "#374151" }} title={file.name}>{file.name}</p>
+                      <p style={{ color: "#9ca3af", fontSize: "0.6rem" }}>
+                        ~{(file.token_estimate ?? 0).toLocaleString()} tokens · {formatBytes(file.file_size ?? 0)}
+                      </p>
+                    </div>
+                    <button onClick={() => deleteKbFile(file.id)}
+                      className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500"
+                      style={{ color: "#9ca3af" }}>
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                <p className="px-2 mt-0.5" style={{ color: "#9ca3af", fontSize: "0.65rem" }}>
+                  Always in context · cached
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Session files — temporary */}
+          <div>
+            <p className="px-2 mb-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: "#9ca3af" }}>Session Files</p>
             <input ref={fileInputRef} type="file" multiple className="hidden"
               accept=".txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.html,.css,.xml,.yaml,.yml"
               onChange={handleFileUpload} />
@@ -330,7 +433,7 @@ export default function AIPage() {
                   </div>
                 ))}
                 <p className="px-2 mt-0.5" style={{ color: "#9ca3af", fontSize: "0.65rem" }}>
-                  Context shared across all agents
+                  Lost on page refresh
                 </p>
               </div>
             )}

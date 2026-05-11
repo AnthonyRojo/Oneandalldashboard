@@ -128,4 +128,24 @@ export const api = {
     apiFetch(`/teams/${teamId}/chat-groups`, {}, token),
   createChatGroup: (teamId: string, name: string, memberIds: string[], token: string) =>
     apiFetch(`/teams/${teamId}/chat-groups`, { method: "POST", body: JSON.stringify({ name, memberIds }) }, token),
+
+  // Knowledge Base
+  getKnowledgeBase: (teamId: string, token: string) =>
+    apiFetch(`/teams/${teamId}/knowledge-base`, {}, token),
+  deleteKnowledgeBaseFile: (teamId: string, fileId: string, token: string) =>
+    apiFetch(`/teams/${teamId}/knowledge-base/${fileId}`, { method: "DELETE" }, token),
+  uploadKnowledgeBaseFile: async (teamId: string, file: File, token: string) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`/api/teams/${teamId}/knowledge-base`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      throw new Error(body.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+  },
 };
