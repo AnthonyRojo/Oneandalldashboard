@@ -6,16 +6,28 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "AI is not configured yet." }, { status: 503 });
   }
 
-  let body: { messages?: { role: string; content: string }[] };
+  let body: {
+    messages?: { role: string; content: string }[];
+    systemPrompt?: string;
+    fileContext?: string;
+  };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const { messages } = body;
+  const { messages, systemPrompt, fileContext } = body;
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return NextResponse.json({ error: "Messages are required." }, { status: 400 });
+  }
+
+  let system =
+    systemPrompt ||
+    "You are a helpful AI assistant embedded in the One&All team collaboration dashboard. Be concise, friendly, and practical. Format responses with markdown when it helps clarity.";
+
+  if (fileContext) {
+    system += `\n\n---\nThe user has uploaded the following files as context. Reference them when relevant:\n\n${fileContext}`;
   }
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -28,10 +40,7 @@ export async function POST(request: NextRequest) {
     body: JSON.stringify({
       model: "claude-sonnet-4-6",
       max_tokens: 1024,
-      system:
-        "You are a helpful AI assistant embedded in the One&All team collaboration dashboard. " +
-        "You help team members with productivity, writing, brainstorming, summarizing, and answering questions. " +
-        "Be concise, friendly, and practical. Format responses with markdown when it helps clarity.",
+      system,
       messages,
     }),
   });
