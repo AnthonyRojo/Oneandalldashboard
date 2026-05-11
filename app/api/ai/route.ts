@@ -80,6 +80,7 @@ export async function POST(request: NextRequest) {
     messages?: Message[];
     systemPrompt?: string;
     fileContext?: string;
+    teamContext?: string;
     teamId?: string;
     provider?: "claude" | "gemini";
   };
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const { messages, systemPrompt, fileContext, teamId, provider = "claude" } = body;
+  const { messages, systemPrompt, fileContext, teamContext, teamId, provider = "claude" } = body;
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return NextResponse.json({ error: "Messages are required." }, { status: 400 });
   }
@@ -108,6 +109,11 @@ export async function POST(request: NextRequest) {
   let system =
     systemPrompt ||
     "You are a helpful AI assistant embedded in the One&All team collaboration dashboard. Be concise, friendly, and practical. Format responses with markdown when helpful.";
+
+  // Inject live team context (compact, pre-formatted client-side)
+  if (teamContext) {
+    system += `\n\n---\nLive team data (today: ${new Date().toISOString().split("T")[0]}):\n${teamContext}`;
+  }
 
   // Inject persistent knowledge base
   if (teamId) {

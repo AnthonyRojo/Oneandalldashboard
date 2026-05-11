@@ -7,7 +7,7 @@ import {
   ClipboardList, PenTool, BarChart2, Plus, BookOpen, Trash2,
   Image as ImageIcon,
 } from "lucide-react";
-import { useApp } from "@/context/AppContext";
+import { useApp, type TeamMember, type Task, type Project, type CalendarEvent, type Announcement } from "@/context/AppContext";
 import { api } from "@/lib/api";
 
 interface UploadedFile {
@@ -86,7 +86,7 @@ const AGENTS: Agent[] = [
       { category: "Review", label: "Review this text and suggest improvements", color: "#10b981" },
     ],
     systemPrompt:
-      "You are a helpful AI assistant embedded in the One&All team collaboration dashboard. Help with productivity, writing, brainstorming, task management, and research. Be concise, friendly, and practical. Format responses with markdown when helpful.",
+      "You are Hub, the core AI for the One&All team dashboard. You have live access to this team's tasks, members, projects, events, and announcements — reference them directly when relevant.\n\nRoute every question to the right mental model:\n- Tasks/priority → RICE scoring or MoSCoW triage\n- Writing → clarity-first, One&All brand voice (confident, warm, inclusive)\n- Meetings → Cornell format, action items as [ACTION] What · Who · By when\n- Data → lead vs lag metrics, OKR framing\n- Planning → dependency mapping, T-shirt sizing (XS <1h → XL >1wk)\n\nBe concise and practical. Use markdown. When you see team context, use it — cite real names, task counts, dates.",
     defaultProvider: "gemini",
   },
   {
@@ -103,7 +103,7 @@ const AGENTS: Agent[] = [
       { category: "Estimate", label: "How long should this task take?", color: "#10b981" },
     ],
     systemPrompt:
-      "You are a task management expert embedded in the One&All dashboard. Help users write clear task descriptions, estimate effort, prioritize by impact and urgency, and break projects into actionable subtasks. Be structured and practical.",
+      "You are a task management specialist for the One&All dashboard. You have live access to the team's real tasks, assignees, and projects — reference them directly.\n\nFrameworks to apply:\n- RICE for prioritization: (Reach × Impact × Confidence) / Effort\n- MoSCoW for triage: Must / Should / Could / Won't\n- SMART for writing tasks: Specific, Measurable, Achievable, Relevant, Time-bound\n- T-shirt sizing: XS <1h | S 1-4h | M 1-2d | L 3-5d | XL >1wk\n\nTask description format: Title | Priority | Estimate | Assignee | Due | Acceptance criteria\n\nAlways surface blockers and dependencies. When reviewing real tasks, flag overdue items and unbalanced workloads. Be structured and direct.",
     defaultProvider: "gemini",
   },
   {
@@ -120,7 +120,7 @@ const AGENTS: Agent[] = [
       { category: "Urgent", label: "Draft an urgent all-hands notice", color: "#ef4444" },
     ],
     systemPrompt:
-      "You are a communications specialist embedded in the One&All dashboard. Help users draft clear, engaging team announcements, updates, polls, and notices. Keep messaging professional yet friendly.",
+      "You are a communications specialist for the One&All dashboard. You have access to the team's member list and recent announcements.\n\nStandards:\n- The 5 Cs: Clear, Concise, Correct, Compelling, Courteous\n- Urgency tiers: FYI (no action needed) | Action Required (include deadline) | Urgent (same-day response)\n- One CTA per announcement — never bury the ask\n- Polls: neutral question framing, 2-5 balanced options, always state a close date\n- Welcome messages: name + role + how to reach them\n- Inclusive, person-first language; no jargon\n\nWhen drafting, state the urgency tier first, then write. Keep under 150 words unless complexity demands more.",
     defaultProvider: "gemini",
   },
   {
@@ -137,7 +137,7 @@ const AGENTS: Agent[] = [
       { category: "Recap", label: "Write a meeting recap email", color: "#10b981" },
     ],
     systemPrompt:
-      "You are a meeting productivity expert embedded in the One&All dashboard. Help users summarize notes, extract action items with owners and deadlines, create structured agendas, and write recap emails. Prioritize clarity and actionability.",
+      "You are a meeting productivity specialist for the One&All dashboard. You have access to the team's upcoming and past events and member list.\n\nStandards:\n- Action items always: [ACTION] What → Who → By when. No owner = not an action item, flag it.\n- Summaries follow Cornell structure: Key decisions | Action items | Open questions\n- Agendas: one-line Purpose + Pre-read + time-boxed items (owner per item)\n- Recap email subject: 'Meeting Recap: [title] [date]' → Decisions → Actions → Next steps → Next meeting\n\nBe aggressive extracting actions — 'I'll look into it' is an action item. Flag any item missing an owner or deadline as a risk. Format everything as scannable bullets.",
     defaultProvider: "claude",
   },
   {
@@ -154,7 +154,7 @@ const AGENTS: Agent[] = [
       { category: "Ideas", label: "Generate 5 ideas for our next team post", color: "#f59e0b" },
     ],
     systemPrompt:
-      "You are a content and copywriting expert embedded in the One&All dashboard. Help write, edit, and refine team emails, announcements, posts, and internal docs. Match the requested tone and keep messaging clear and impactful.",
+      "You are a content and copywriting specialist for the One&All dashboard. The team's brand guide is in the knowledge base — apply it to all content.\n\nStandards:\n- Clarity-first: cut every word that doesn't earn its place. Target 20% shorter on first edit.\n- F-pattern for digital: most important info in the first sentence\n- Email subjects: <50 chars, benefit-first, no clickbait\n- Tone ladder: Formal → Professional → Friendly → Casual — confirm tone before drafting\n- One&All voice: confident, warm, inclusive, action-oriented (see knowledge base for full guide)\n\nWhen editing, briefly explain each significant cut or change. Never fully rewrite without consent — suggest first, rewrite on approval.",
     defaultProvider: "claude",
   },
   {
@@ -171,7 +171,7 @@ const AGENTS: Agent[] = [
       { category: "Trends", label: "Identify trends from this data", color: "#10b981" },
     ],
     systemPrompt:
-      "You are a data analytics expert embedded in the One&All dashboard. Help interpret team performance data, identify trends, build reports, and define meaningful metrics. Translate data into clear insights and actionable recommendations.",
+      "You are a data analytics specialist for the One&All dashboard. You have live access to real task and project metrics — analyze them directly, don't ask the user to paste data.\n\nStandards:\n- Always distinguish lead metrics (predictive: velocity, tasks created) from lag metrics (outcome: completion rate, overdue %)\n- Insight format: '[X] is happening → likely because [Y] → recommend [Z]'\n- OKR framing: Objective (directional) + 3-5 measurable Key Results\n- Flag >20% deviation from prior period as a trend worth noting\n- Workload: flag members with >2× team average open tasks\n\nBe specific with numbers — '3 of 8 tasks overdue (37%)' not 'several tasks overdue'. Use tables for comparisons. End every analysis with 1-3 concrete next actions.",
     defaultProvider: "claude",
   },
 ];
@@ -266,8 +266,92 @@ function AgentButton({
   );
 }
 
+function buildTeamContext(
+  agentId: string,
+  members: TeamMember[],
+  tasks: Task[],
+  projects: Project[],
+  events: CalendarEvent[],
+  announcements: Announcement[],
+): string {
+  const today = new Date().toISOString().split("T")[0];
+  const in7 = new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0];
+  const memberLine = members.map((m) => `${m.name} (${m.role}${m.status !== "Available" ? ", " + m.status : ""})`).join(" | ");
+
+  if (agentId === "hub") {
+    const open = tasks.filter((t) => t.status !== "completed");
+    const overdue = open.filter((t) => t.dueDate && t.dueDate < today).length;
+    const weekEvents = events.filter((e) => e.date >= today && e.date <= in7).length;
+    const active = projects.filter((p) => p.status === "active").length;
+    return `TEAM SNAPSHOT: ${members.length} members | ${open.length} open tasks (${overdue} overdue) | ${weekEvents} events this week | ${active} active projects`;
+  }
+
+  if (agentId === "tasks") {
+    const pOrder: Record<string, number> = { High: 0, Medium: 1, Low: 2 };
+    const open = tasks
+      .filter((t) => t.status !== "completed")
+      .sort((a, b) => (pOrder[a.priority] ?? 1) - (pOrder[b.priority] ?? 1))
+      .slice(0, 15);
+    const overdue = tasks.filter((t) => t.status !== "completed" && t.dueDate && t.dueDate < today).length;
+    const mMap = Object.fromEntries(members.map((m) => [m.id, m.name]));
+    const taskLines = open.map((t) => {
+      const who = t.assigneeIds.map((id) => mMap[id] ?? "?").join(", ") || "unassigned";
+      return `[${t.priority[0]}] ${t.title} | ${who} | due:${t.dueDate || "none"} | ${t.status}`;
+    }).join("\n");
+    const projLine = projects.map((p) => `${p.name} (${p.status}, ${p.progress}%)`).join(" | ");
+    return `MEMBERS: ${memberLine}\nPROJECTS: ${projLine}\nOPEN TASKS (${open.length} shown, ${overdue} overdue):\n${taskLines}`;
+  }
+
+  if (agentId === "analytics") {
+    const open = tasks.filter((t) => t.status !== "completed");
+    const overdue = open.filter((t) => t.dueDate && t.dueDate < today).length;
+    const counts = { todo: 0, "in-progress": 0, review: 0, completed: 0 };
+    tasks.forEach((t) => { if (t.status in counts) counts[t.status as keyof typeof counts]++; });
+    const byMember = members.map((m) => {
+      const mo = open.filter((t) => t.assigneeIds.includes(m.id));
+      const od = mo.filter((t) => t.dueDate && t.dueDate < today).length;
+      return `${m.name}:${mo.length}${od ? `(${od}od)` : ""}`;
+    }).join(" | ");
+    const projLine = projects.map((p) => `${p.name}:${p.progress}%(${p.status})`).join(" | ");
+    return `TASKS: ${tasks.length} total | todo:${counts.todo} in-progress:${counts["in-progress"]} review:${counts.review} done:${counts.completed} | overdue:${overdue}\nBY MEMBER: ${byMember}\nPROJECTS: ${projLine}`;
+  }
+
+  if (agentId === "meetings") {
+    const upcoming = events
+      .filter((e) => e.date >= today && e.date <= in7)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((e) => `${e.title} | ${e.date} ${e.startTime}-${e.endTime} | ${e.type}`)
+      .join("\n") || "none";
+    const recent = events
+      .filter((e) => e.date < today)
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 3)
+      .map((e) => `${e.title} | ${e.date}`)
+      .join("\n");
+    return [`MEMBERS: ${memberLine}`, `UPCOMING (7 days):\n${upcoming}`, recent ? `RECENT:\n${recent}` : ""].filter(Boolean).join("\n");
+  }
+
+  if (agentId === "announcements") {
+    const recent = [...announcements]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 5)
+      .map((a) => `"${a.content.slice(0, 60)}…" by ${a.authorName} | ${a.createdAt.split("T")[0]}`)
+      .join("\n");
+    return [`MEMBERS: ${memberLine}`, recent ? `RECENT:\n${recent}` : ""].filter(Boolean).join("\n");
+  }
+
+  if (agentId === "content") {
+    return `MEMBERS: ${memberLine}\nBrand guide is in the knowledge base — apply it to all output.`;
+  }
+
+  return "";
+}
+
 export default function AIPage() {
-  const { currentUser, currentTeamId, accessToken } = useApp();
+  const {
+    currentUser, currentTeamId, accessToken,
+    currentMembers, currentTasks, currentProjects, currentEvents, currentAnnouncements,
+  } = useApp();
   const [activeAgentId, setActiveAgentId] = useState("hub");
   const [conversations, setConversations] = useState<Record<string, Message[]>>({});
   const [providerPerAgent, setProviderPerAgent] = useState<Record<string, "claude" | "gemini">>({});
@@ -419,6 +503,10 @@ export default function AIPage() {
       ? uploadedFiles.map((f) => `=== ${f.name} ===\n${f.content}`).join("\n\n")
       : undefined;
 
+    const teamContext = buildTeamContext(
+      activeAgentId, currentMembers, currentTasks, currentProjects, currentEvents, currentAnnouncements,
+    ) || undefined;
+
     // Strip image data from history messages — only the current message carries the image
     const apiMessages = newMessages.map((m, i) =>
       i === newMessages.length - 1 ? m : { role: m.role, content: m.content }
@@ -432,6 +520,7 @@ export default function AIPage() {
           messages: apiMessages,
           systemPrompt: activeAgent.systemPrompt,
           fileContext,
+          teamContext,
           teamId: currentTeamId,
           provider,
         }),
