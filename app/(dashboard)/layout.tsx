@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useApp, ChatMessage, Toast } from "@/context/AppContext";
 import {
   LayoutDashboard, CheckSquare, Calendar, Megaphone, BarChart2,
-  Users, Settings, HelpCircle, LogOut, Zap, ChevronDown, Plus,
+  Users, Settings, HelpCircle, LogOut, Zap, ChevronDown, Plus, Sparkles,
   Bell, MessageSquare, Search, X, Check, Loader2, Send, Pencil, Trash2,
   Hash, UserPlus, CheckCircle2, AlertCircle, Info,
 } from "lucide-react";
@@ -327,6 +327,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
     { label: "Announcements", icon: Megaphone, path: "/announcements" },
     { label: "Analytics", icon: BarChart2, path: "/analytics" },
     { label: "Team", icon: Users, path: "/team" },
+    { label: "AI Assistant", icon: Sparkles, path: "/ai" },
   ];
   const BOTTOM_ITEMS = [
     { label: "Settings", icon: Settings, path: "/settings" },
