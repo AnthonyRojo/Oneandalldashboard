@@ -118,7 +118,8 @@ export async function POST(request: NextRequest) {
         : await callClaude(messages, system, claudeKey!);
     return NextResponse.json({ text });
   } catch (err) {
-    console.error("AI error:", err);
-    return NextResponse.json({ error: "AI request failed. Please try again." }, { status: 502 });
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("AI error:", msg);
+    return NextResponse.json({ error: msg }, { status: 502 });
   }
 }
