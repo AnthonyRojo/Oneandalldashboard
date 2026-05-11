@@ -201,7 +201,9 @@ function SessionHistory({
       {sessions.map((s) => {
         const isActive = sessionIds[agentId] === s.id;
         return (
-          <div key={s.id} className="flex items-center group">
+          <div key={s.id} className="flex items-center" style={{ position: "relative" }}
+            onMouseEnter={(e) => { const btn = e.currentTarget.querySelector(".del-btn") as HTMLElement; if (btn) btn.style.opacity = "1"; }}
+            onMouseLeave={(e) => { const btn = e.currentTarget.querySelector(".del-btn") as HTMLElement; if (btn) btn.style.opacity = "0"; }}>
             <button onClick={() => openSession(s.id, agentId)}
               className="flex items-center gap-1.5 pl-3 pr-1 py-1.5 text-left transition-colors hover:bg-gray-50 flex-1 min-w-0"
               style={{ background: isActive ? "#fafaf0" : "transparent" }}>
@@ -211,8 +213,10 @@ function SessionHistory({
               <span style={{ color: "#9ca3af", fontSize: "0.6rem", flexShrink: 0 }}>{timeAgo(s.updated_at)}</span>
             </button>
             <button onClick={() => deleteSession(s.id, agentId)}
-              className="flex-shrink-0 px-1 py-1.5 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-400"
-              style={{ color: "#9ca3af" }} title="Delete">
+              className="del-btn flex-shrink-0 px-1 py-1.5 transition-colors"
+              style={{ color: "#d1d5db", opacity: 0 }} title="Delete"
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#ef4444"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "#d1d5db"; }}>
               <Trash2 className="w-3 h-3" />
             </button>
           </div>
