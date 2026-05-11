@@ -140,6 +140,8 @@ export const api = {
     apiFetch(`/teams/${teamId}/ai-sessions`, { method: "POST", body: JSON.stringify({ agentId, title }) }, token),
   saveMessage: (teamId: string, sessionId: string, role: string, content: string, token: string) =>
     apiFetch(`/teams/${teamId}/ai-sessions/${sessionId}/messages`, { method: "POST", body: JSON.stringify({ role, content }) }, token),
+  deleteSession: (teamId: string, sessionId: string, token: string) =>
+    apiFetch(`/teams/${teamId}/ai-sessions/${sessionId}`, { method: "DELETE" }, token),
 
   // Knowledge Base
   getKnowledgeBase: (teamId: string, token: string) =>

@@ -185,13 +185,14 @@ function CopyButton({ text }: { text: string }) {
 }
 
 function SessionHistory({
-  agentId, sessionsList, sessionIds, openSession, clearChat,
+  agentId, sessionsList, sessionIds, openSession, clearChat, deleteSession,
 }: {
   agentId: string;
   sessionsList: Record<string, SessionSummary[]>;
   sessionIds: Record<string, string>;
   openSession: (sessionId: string, agentId: string) => void;
   clearChat: () => void;
+  deleteSession: (sessionId: string, agentId: string) => void;
 }) {
   const sessions = sessionsList[agentId] ?? [];
   if (sessions.length === 0) return null;
@@ -200,14 +201,21 @@ function SessionHistory({
       {sessions.map((s) => {
         const isActive = sessionIds[agentId] === s.id;
         return (
-          <button key={s.id} onClick={() => openSession(s.id, agentId)}
-            className="flex items-center gap-1.5 pl-3 pr-2 py-1.5 text-left transition-colors hover:bg-gray-50 group"
-            style={{ background: isActive ? "#fafaf0" : "transparent" }}>
-            <span className="flex-1 text-xs truncate" style={{ color: isActive ? "#111827" : "#6b7280", fontWeight: isActive ? 500 : 400 }}>
-              {s.title ?? "Untitled"}
-            </span>
-            <span style={{ color: "#9ca3af", fontSize: "0.6rem", flexShrink: 0 }}>{timeAgo(s.updated_at)}</span>
-          </button>
+          <div key={s.id} className="flex items-center group">
+            <button onClick={() => openSession(s.id, agentId)}
+              className="flex items-center gap-1.5 pl-3 pr-1 py-1.5 text-left transition-colors hover:bg-gray-50 flex-1 min-w-0"
+              style={{ background: isActive ? "#fafaf0" : "transparent" }}>
+              <span className="flex-1 text-xs truncate" style={{ color: isActive ? "#111827" : "#6b7280", fontWeight: isActive ? 500 : 400 }}>
+                {s.title ?? "Untitled"}
+              </span>
+              <span style={{ color: "#9ca3af", fontSize: "0.6rem", flexShrink: 0 }}>{timeAgo(s.updated_at)}</span>
+            </button>
+            <button onClick={() => deleteSession(s.id, agentId)}
+              className="flex-shrink-0 px-1 py-1.5 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-400"
+              style={{ color: "#9ca3af" }} title="Delete">
+              <Trash2 className="w-3 h-3" />
+            </button>
+          </div>
         );
       })}
       <button onClick={clearChat}
@@ -327,6 +335,24 @@ export default function AIPage() {
       if (res.messages) {
         setConversations((prev) => ({ ...prev, [agentId]: res.messages }));
         setSessionIds((prev) => ({ ...prev, [agentId]: sessionId }));
+        setSessionLoaded((prev) => ({ ...prev, [agentId]: true }));
+      }
+    } catch { /* Non-fatal */ }
+  };
+
+  const deleteSession = async (sessionId: string, agentId: string) => {
+    if (!currentTeamId || !accessToken) return;
+    try {
+      await api.deleteSession(currentTeamId, sessionId, accessToken);
+      // Remove from list
+      setSessionsList((prev) => ({
+        ...prev,
+        [agentId]: (prev[agentId] ?? []).filter((s) => s.id !== sessionId),
+      }));
+      // If it was the active session, clear the chat
+      if (sessionIds[agentId] === sessionId) {
+        setConversations((prev) => ({ ...prev, [agentId]: [] }));
+        setSessionIds((prev) => { const n = { ...prev }; delete n[agentId]; return n; });
         setSessionLoaded((prev) => ({ ...prev, [agentId]: true }));
       }
     } catch { /* Non-fatal */ }
@@ -499,7 +525,7 @@ export default function AIPage() {
                   active={activeAgentId === agent.id}
                   hasHistory={(sessionsList[agent.id]?.length ?? 0) > 0}
                   onClick={() => { setActiveAgentId(agent.id); loadSession(agent.id); loadSessionsList(agent.id); }} />
-                {activeAgentId === agent.id && <SessionHistory agentId={agent.id} sessionsList={sessionsList} sessionIds={sessionIds} openSession={openSession} clearChat={clearChat} />}
+                {activeAgentId === agent.id && <SessionHistory agentId={agent.id} sessionsList={sessionsList} sessionIds={sessionIds} openSession={openSession} clearChat={clearChat} deleteSession={deleteSession} />}
               </div>
             ))}
           </div>
@@ -513,7 +539,7 @@ export default function AIPage() {
                   active={activeAgentId === agent.id}
                   hasHistory={(sessionsList[agent.id]?.length ?? 0) > 0}
                   onClick={() => { setActiveAgentId(agent.id); loadSession(agent.id); loadSessionsList(agent.id); }} />
-                {activeAgentId === agent.id && <SessionHistory agentId={agent.id} sessionsList={sessionsList} sessionIds={sessionIds} openSession={openSession} clearChat={clearChat} />}
+                {activeAgentId === agent.id && <SessionHistory agentId={agent.id} sessionsList={sessionsList} sessionIds={sessionIds} openSession={openSession} clearChat={clearChat} deleteSession={deleteSession} />}
               </div>
             ))}
           </div>
