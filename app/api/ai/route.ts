@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 import { getSupabaseAdmin } from "@/lib/api-helpers";
 
+type AttachedImage = { data: string; mimeType: string };
+
 type Message = {
   role: string;
   content: string;
-  imageData?: string;
-  imageMimeType?: string;
+  images?: AttachedImage[];
 };
 
 type ClaudeContent =
@@ -19,10 +20,11 @@ async function callClaude(
   apiKey: string
 ): Promise<string> {
   const claudeMessages = messages.map((m) => {
-    if (m.imageData && m.imageMimeType) {
-      const parts: ClaudeContent[] = [
-        { type: "image", source: { type: "base64", media_type: m.imageMimeType, data: m.imageData } },
-      ];
+    if (m.images && m.images.length > 0) {
+      const parts: ClaudeContent[] = m.images.map((img) => ({
+        type: "image",
+        source: { type: "base64", media_type: img.mimeType, data: img.data },
+      }));
       if (m.content) parts.push({ type: "text", text: m.content });
       return { role: m.role, content: parts };
     }
@@ -57,8 +59,10 @@ async function callGemini(
   const ai = new GoogleGenAI({ apiKey });
   const contents = messages.map((m) => {
     const parts: { text?: string; inlineData?: { mimeType: string; data: string } }[] = [];
-    if (m.imageData && m.imageMimeType) {
-      parts.push({ inlineData: { mimeType: m.imageMimeType, data: m.imageData } });
+    if (m.images) {
+      for (const img of m.images) {
+        parts.push({ inlineData: { mimeType: img.mimeType, data: img.data } });
+      }
     }
     if (m.content) parts.push({ text: m.content });
     if (parts.length === 0) parts.push({ text: "" });

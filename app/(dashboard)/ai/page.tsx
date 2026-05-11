@@ -5,7 +5,7 @@ import {
   Sparkles, Send, Loader2, RotateCcw, Copy, Check,
   Paperclip, X, FileText, Layers, CheckSquare, Megaphone,
   ClipboardList, PenTool, BarChart2, Plus, BookOpen, Trash2,
-  Image as ImageIcon,
+  Image as ImageIcon, FileSpreadsheet,
 } from "lucide-react";
 import { useApp, type TeamMember, type Task, type Project, type CalendarEvent, type Announcement } from "@/context/AppContext";
 import { api } from "@/lib/api";
@@ -40,11 +40,15 @@ function timeAgo(dateStr: string) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
+interface AttachedImage {
+  data: string;     // base64, no data-URI prefix
+  mimeType: string;
+}
+
 interface Message {
   role: "user" | "assistant";
   content: string;
-  imageData?: string;     // base64, no data-URI prefix
-  imageMimeType?: string; // e.g. "image/jpeg"
+  images?: AttachedImage[];
 }
 
 interface PendingImage {
@@ -366,7 +370,7 @@ export default function AIPage() {
   const [kbFiles, setKbFiles] = useState<KnowledgeBaseFile[]>([]);
   const [kbUploading, setKbUploading] = useState(false);
   const [kbError, setKbError] = useState<string | null>(null);
-  const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
+  const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -468,15 +472,15 @@ export default function AIPage() {
 
   const send = async (text: string) => {
     const trimmed = text.trim();
-    if ((!trimmed && !pendingImage) || loading) return;
+    if ((!trimmed && pendingImages.length === 0) || loading) return;
 
-    const img = pendingImage;
-    setPendingImage(null);
+    const imgs = pendingImages;
+    setPendingImages([]);
 
     const userMsg: Message = {
       role: "user",
       content: trimmed,
-      ...(img ? { imageData: img.data, imageMimeType: img.mimeType } : {}),
+      ...(imgs.length > 0 ? { images: imgs.map((i) => ({ data: i.data, mimeType: i.mimeType })) } : {}),
     };
     const newMessages: Message[] = [...messages, userMsg];
     setConversations((prev) => ({ ...prev, [activeAgentId]: newMessages }));
@@ -497,7 +501,7 @@ export default function AIPage() {
       }
     }
     // Persist text only — image data is too large for DB
-    if (sessionId) persistMessage(sessionId, "user", trimmed || "(image)");
+    if (sessionId) persistMessage(sessionId, "user", trimmed || `(${imgs.length} image${imgs.length > 1 ? "s" : ""})`);
 
     const fileContext = uploadedFiles.length > 0
       ? uploadedFiles.map((f) => `=== ${f.name} ===\n${f.content}`).join("\n\n")
@@ -562,34 +566,66 @@ export default function AIPage() {
     setError(null);
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    Array.from(e.target.files ?? []).forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const content = ev.target?.result as string;
-        setUploadedFiles((prev) => [
-          ...prev.filter((f) => f.name !== file.name),
-          { id: `${file.name}-${Date.now()}`, name: file.name, content },
-        ]);
-      };
-      reader.readAsText(file);
-    });
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
     e.target.value = "";
+    for (const file of files) {
+      const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+      const isCsv = /\.csv$/i.test(file.name);
+      if (isExcel) {
+        try {
+          const { read, utils } = await import("xlsx");
+          const data = new Uint8Array(await file.arrayBuffer());
+          const wb = read(data, { type: "array" });
+          const parts: string[] = [`[Spreadsheet: ${file.name} | Sheets: ${wb.SheetNames.join(", ")}]`];
+          for (const name of wb.SheetNames) {
+            const csv = utils.sheet_to_csv(wb.Sheets[name]);
+            const rows = csv.split("\n").filter((r) => r.trim());
+            const MAX = 500;
+            const note = rows.length > MAX ? ` — first ${MAX} of ${rows.length} rows` : "";
+            parts.push(`=== ${name}${note} ===\n${rows.slice(0, MAX).join("\n")}`);
+          }
+          const content = parts.join("\n\n");
+          setUploadedFiles((prev) => [
+            ...prev.filter((f) => f.name !== file.name),
+            { id: `${file.name}-${Date.now()}`, name: file.name, content },
+          ]);
+        } catch {
+          setError(`Could not parse ${file.name}. Make sure it's a valid Excel file.`);
+        }
+      } else {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          let content = ev.target?.result as string;
+          if (isCsv) {
+            const rows = content.split("\n").filter((r) => r.trim());
+            const MAX = 500;
+            if (rows.length > MAX) content = rows.slice(0, MAX).join("\n") + `\n[...${rows.length - MAX} more rows truncated]`;
+          }
+          setUploadedFiles((prev) => [
+            ...prev.filter((f) => f.name !== file.name),
+            { id: `${file.name}-${Date.now()}`, name: file.name, content },
+          ]);
+        };
+        reader.readAsText(file);
+      }
+    }
   };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files ?? []);
     e.target.value = "";
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { setError("Image must be under 5 MB."); return; }
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const dataUrl = ev.target?.result as string;
-      const [prefix, data] = dataUrl.split(",");
-      const mimeType = prefix.split(":")[1].split(";")[0];
-      setPendingImage({ data, mimeType, previewUrl: dataUrl });
-    };
-    reader.readAsDataURL(file);
+    files.forEach((file) => {
+      if (file.size > 5 * 1024 * 1024) { setError(`${file.name} must be under 5 MB.`); return; }
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const dataUrl = ev.target?.result as string;
+        const [prefix, data] = dataUrl.split(",");
+        const mimeType = prefix.split(":")[1].split(";")[0];
+        setPendingImages((prev) => [...prev, { data, mimeType, previewUrl: dataUrl }]);
+      };
+      reader.readAsDataURL(file);
+    });
   };
 
   const handleKbUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -725,14 +761,18 @@ export default function AIPage() {
               className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left transition-colors hover:bg-gray-50"
               style={{ color: "#6b7280", border: "1px dashed #d1d5db" }}>
               <Plus className="w-3.5 h-3.5 flex-shrink-0" />
-              <span className="text-xs">Upload file</span>
+              <span className="text-xs">Upload file / CSV / Excel</span>
             </button>
             {uploadedFiles.length > 0 && (
               <div className="mt-2 flex flex-col gap-1">
-                {uploadedFiles.map((file) => (
+                {uploadedFiles.map((file) => {
+                  const isSpreadsheet = /\.(csv|xlsx|xls)$/i.test(file.name);
+                  return (
                   <div key={file.id} className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg"
-                    style={{ background: "#f9fafb" }}>
-                    <FileText className="w-3 h-3 flex-shrink-0" style={{ color: "#6b7280" }} />
+                    style={{ background: isSpreadsheet ? "#f0fdf4" : "#f9fafb" }}>
+                    {isSpreadsheet
+                      ? <FileSpreadsheet className="w-3 h-3 flex-shrink-0" style={{ color: "#16a34a" }} />
+                      : <FileText className="w-3 h-3 flex-shrink-0" style={{ color: "#6b7280" }} />}
                     <span className="text-xs flex-1 truncate" style={{ color: "#374151" }} title={file.name}>
                       {file.name}
                     </span>
@@ -741,7 +781,8 @@ export default function AIPage() {
                       <X className="w-3 h-3" />
                     </button>
                   </div>
-                ))}
+                  );
+                })}
                 <p className="px-2 mt-0.5" style={{ color: "#9ca3af", fontSize: "0.65rem" }}>
                   Lost on page refresh
                 </p>
@@ -845,18 +886,23 @@ export default function AIPage() {
                         : <AgentIcon className="w-3.5 h-3.5" />}
                     </div>
                     <div className={`max-w-[75%] flex flex-col gap-1 ${isUser ? "items-end" : "items-start"}`}>
-                      {msg.imageData && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={`data:${msg.imageMimeType};base64,${msg.imageData}`}
-                          alt="attached"
-                          className="rounded-2xl object-cover"
-                          style={{
-                            maxWidth: 260, maxHeight: 200,
-                            borderBottomRightRadius: isUser ? 4 : undefined,
-                            borderBottomLeftRadius: isUser ? undefined : 4,
-                          }}
-                        />
+                      {msg.images && msg.images.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {msg.images.map((img, j) => (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img key={j}
+                              src={`data:${img.mimeType};base64,${img.data}`}
+                              alt="attached"
+                              className="object-cover rounded-2xl"
+                              style={{
+                                maxWidth: msg.images!.length === 1 ? 260 : 120,
+                                maxHeight: msg.images!.length === 1 ? 200 : 120,
+                                borderBottomRightRadius: isUser ? 4 : undefined,
+                                borderBottomLeftRadius: isUser ? undefined : 4,
+                              }}
+                            />
+                          ))}
+                        </div>
                       )}
                       {msg.content && (
                         <div className="px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap"
@@ -908,44 +954,46 @@ export default function AIPage() {
             <div className="flex flex-col gap-2 px-4 py-3 rounded-2xl border transition-colors focus-within:border-gray-300"
               style={{ background: "#f9f9f6", borderColor: "#e5e7eb" }}>
 
-              {/* Pending image preview */}
-              {pendingImage && (
-                <div className="flex items-start gap-2">
-                  <div className="relative inline-flex">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={pendingImage.previewUrl} alt="preview"
-                      className="h-20 w-20 object-cover rounded-xl border"
-                      style={{ borderColor: "#e5e7eb" }} />
-                    <button onClick={() => setPendingImage(null)}
-                      className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full flex items-center justify-center"
-                      style={{ background: "#374151", color: "white" }}>
-                      <X className="w-2.5 h-2.5" />
-                    </button>
-                  </div>
+              {/* Pending image previews */}
+              {pendingImages.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {pendingImages.map((img, i) => (
+                    <div key={i} className="relative inline-flex flex-shrink-0">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={img.previewUrl} alt="preview"
+                        className="h-16 w-16 object-cover rounded-xl border"
+                        style={{ borderColor: "#e5e7eb" }} />
+                      <button onClick={() => setPendingImages((prev) => prev.filter((_, j) => j !== i))}
+                        className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full flex items-center justify-center"
+                        style={{ background: "#374151", color: "white" }}>
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
 
               {/* Input row */}
               <div className="flex items-end gap-2">
                 <input ref={fileInputRef} type="file" multiple className="hidden"
-                  accept=".txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.html,.css,.xml,.yaml,.yml"
+                  accept=".txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.html,.css,.xml,.yaml,.yml,.xlsx,.xls"
                   onChange={handleFileUpload} />
-                <input ref={imageInputRef} type="file" className="hidden"
+                <input ref={imageInputRef} type="file" multiple className="hidden"
                   accept="image/jpeg,image/png,image/gif,image/webp"
                   onChange={handleImageSelect} />
-                <button onClick={() => fileInputRef.current?.click()} title="Attach file"
+                <button onClick={() => fileInputRef.current?.click()} title="Attach file or spreadsheet"
                   className="flex-shrink-0 mb-0.5 p-1.5 rounded-lg hover:bg-gray-200 transition-colors"
-                  style={{ color: "#9ca3af" }}>
+                  style={{ color: uploadedFiles.length > 0 ? "#10b981" : "#9ca3af" }}>
                   <Paperclip className="w-4 h-4" />
                 </button>
-                <button onClick={() => imageInputRef.current?.click()} title="Attach image"
+                <button onClick={() => imageInputRef.current?.click()} title="Attach images"
                   className="flex-shrink-0 mb-0.5 p-1.5 rounded-lg hover:bg-gray-200 transition-colors"
-                  style={{ color: pendingImage ? "#3b82f6" : "#9ca3af" }}>
+                  style={{ color: pendingImages.length > 0 ? "#3b82f6" : "#9ca3af" }}>
                   <ImageIcon className="w-4 h-4" />
                 </button>
                 <textarea ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={pendingImage ? "Add a caption or just send the image…" : `Ask ${activeAgent.label}…`}
+                  placeholder={pendingImages.length > 0 ? "Add a caption or just send…" : `Ask ${activeAgent.label}…`}
                   rows={1}
                   className="flex-1 resize-none outline-none bg-transparent text-sm leading-relaxed"
                   style={{ color: "#111827", maxHeight: 160 }}
@@ -955,11 +1003,11 @@ export default function AIPage() {
                     el.style.height = `${el.scrollHeight}px`;
                   }}
                   autoFocus />
-                <button onClick={() => send(input)} disabled={(!input.trim() && !pendingImage) || loading}
+                <button onClick={() => send(input)} disabled={(!input.trim() && pendingImages.length === 0) || loading}
                   className="flex-shrink-0 w-7 h-7 rounded-xl flex items-center justify-center transition-all mb-0.5"
                   style={{
-                    background: (input.trim() || pendingImage) && !loading ? "#111827" : "#e5e7eb",
-                    color: (input.trim() || pendingImage) && !loading ? "white" : "#9ca3af",
+                    background: (input.trim() || pendingImages.length > 0) && !loading ? "#111827" : "#e5e7eb",
+                    color: (input.trim() || pendingImages.length > 0) && !loading ? "white" : "#9ca3af",
                   }}>
                   {loading
                     ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
