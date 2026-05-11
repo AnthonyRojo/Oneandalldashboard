@@ -43,6 +43,7 @@ interface Agent {
   subtitle: string;
   suggestions: Suggestion[];
   systemPrompt: string;
+  defaultProvider: "claude" | "gemini";
 }
 
 const AGENTS: Agent[] = [
@@ -61,6 +62,7 @@ const AGENTS: Agent[] = [
     ],
     systemPrompt:
       "You are a helpful AI assistant embedded in the One&All team collaboration dashboard. Help with productivity, writing, brainstorming, task management, and research. Be concise, friendly, and practical. Format responses with markdown when helpful.",
+    defaultProvider: "gemini",
   },
   {
     id: "tasks",
@@ -77,6 +79,7 @@ const AGENTS: Agent[] = [
     ],
     systemPrompt:
       "You are a task management expert embedded in the One&All dashboard. Help users write clear task descriptions, estimate effort, prioritize by impact and urgency, and break projects into actionable subtasks. Be structured and practical.",
+    defaultProvider: "gemini",
   },
   {
     id: "announcements",
@@ -93,6 +96,7 @@ const AGENTS: Agent[] = [
     ],
     systemPrompt:
       "You are a communications specialist embedded in the One&All dashboard. Help users draft clear, engaging team announcements, updates, polls, and notices. Keep messaging professional yet friendly.",
+    defaultProvider: "gemini",
   },
   {
     id: "meetings",
@@ -109,6 +113,7 @@ const AGENTS: Agent[] = [
     ],
     systemPrompt:
       "You are a meeting productivity expert embedded in the One&All dashboard. Help users summarize notes, extract action items with owners and deadlines, create structured agendas, and write recap emails. Prioritize clarity and actionability.",
+    defaultProvider: "claude",
   },
   {
     id: "content",
@@ -125,6 +130,7 @@ const AGENTS: Agent[] = [
     ],
     systemPrompt:
       "You are a content and copywriting expert embedded in the One&All dashboard. Help write, edit, and refine team emails, announcements, posts, and internal docs. Match the requested tone and keep messaging clear and impactful.",
+    defaultProvider: "claude",
   },
   {
     id: "analytics",
@@ -141,6 +147,7 @@ const AGENTS: Agent[] = [
     ],
     systemPrompt:
       "You are a data analytics expert embedded in the One&All dashboard. Help interpret team performance data, identify trends, build reports, and define meaningful metrics. Translate data into clear insights and actionable recommendations.",
+    defaultProvider: "claude",
   },
 ];
 
@@ -190,6 +197,7 @@ export default function AIPage() {
   const { currentUser, currentTeamId, accessToken } = useApp();
   const [activeAgentId, setActiveAgentId] = useState("hub");
   const [conversations, setConversations] = useState<Record<string, Message[]>>({});
+  const [providerPerAgent, setProviderPerAgent] = useState<Record<string, "claude" | "gemini">>({});
   const [sessionIds, setSessionIds] = useState<Record<string, string>>({});
   const [sessionLoaded, setSessionLoaded] = useState<Record<string, boolean>>({});
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -210,6 +218,12 @@ export default function AIPage() {
   const messages = conversations[activeAgentId] ?? [];
   const isEmpty = messages.length === 0;
   const activeCount = Object.values(conversations).filter((m) => m.length > 0).length;
+  const provider = providerPerAgent[activeAgentId] ?? activeAgent.defaultProvider;
+  const toggleProvider = () =>
+    setProviderPerAgent((prev) => ({
+      ...prev,
+      [activeAgentId]: provider === "claude" ? "gemini" : "claude",
+    }));
 
   const fetchKb = useCallback(async () => {
     if (!currentTeamId || !accessToken) return;
@@ -289,6 +303,7 @@ export default function AIPage() {
           systemPrompt: activeAgent.systemPrompt,
           fileContext,
           teamId: currentTeamId,
+          provider,
         }),
       });
       const data = await res.json();
@@ -522,13 +537,25 @@ export default function AIPage() {
               <p style={{ color: "#6b7280", fontSize: "0.75rem" }}>{activeAgent.subtitle}</p>
             </div>
           </div>
-          {!isEmpty && (
-            <button onClick={clearChat}
-              className="text-xs px-3 py-1.5 rounded-lg border transition-colors hover:bg-gray-50"
-              style={{ color: "#6b7280", borderColor: "#e5e7eb" }}>
-              Clear chat
+          <div className="flex items-center gap-2">
+            <button onClick={toggleProvider}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all hover:shadow-sm"
+              style={{
+                borderColor: provider === "claude" ? "#f59e0b" : "#3b82f6",
+                color: provider === "claude" ? "#f59e0b" : "#3b82f6",
+                background: provider === "claude" ? "#fffbeb" : "#eff6ff",
+              }}
+              title="Switch AI provider">
+              <span>{provider === "claude" ? "✦ Claude" : "◆ Gemini"}</span>
             </button>
-          )}
+            {!isEmpty && (
+              <button onClick={clearChat}
+                className="text-xs px-3 py-1.5 rounded-lg border transition-colors hover:bg-gray-50"
+                style={{ color: "#6b7280", borderColor: "#e5e7eb" }}>
+                Clear chat
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Messages */}
