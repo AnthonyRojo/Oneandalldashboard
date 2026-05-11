@@ -23,6 +23,22 @@ interface KnowledgeBaseFile {
   created_at: string;
 }
 
+interface SessionSummary {
+  id: string;
+  title: string | null;
+  updated_at: string;
+}
+
+function timeAgo(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
 interface Message {
   role: "user" | "assistant";
   content: string;
@@ -168,6 +184,42 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+function SessionHistory({
+  agentId, sessionsList, sessionIds, openSession, clearChat,
+}: {
+  agentId: string;
+  sessionsList: Record<string, SessionSummary[]>;
+  sessionIds: Record<string, string>;
+  openSession: (sessionId: string, agentId: string) => void;
+  clearChat: () => void;
+}) {
+  const sessions = sessionsList[agentId] ?? [];
+  if (sessions.length === 0) return null;
+  return (
+    <div className="ml-3 mt-0.5 mb-1 flex flex-col border-l" style={{ borderColor: "#e5e7eb" }}>
+      {sessions.map((s) => {
+        const isActive = sessionIds[agentId] === s.id;
+        return (
+          <button key={s.id} onClick={() => openSession(s.id, agentId)}
+            className="flex items-center gap-1.5 pl-3 pr-2 py-1.5 text-left transition-colors hover:bg-gray-50 group"
+            style={{ background: isActive ? "#fafaf0" : "transparent" }}>
+            <span className="flex-1 text-xs truncate" style={{ color: isActive ? "#111827" : "#6b7280", fontWeight: isActive ? 500 : 400 }}>
+              {s.title ?? "Untitled"}
+            </span>
+            <span style={{ color: "#9ca3af", fontSize: "0.6rem", flexShrink: 0 }}>{timeAgo(s.updated_at)}</span>
+          </button>
+        );
+      })}
+      <button onClick={clearChat}
+        className="flex items-center gap-1.5 pl-3 pr-2 py-1.5 text-left transition-colors hover:bg-gray-50"
+        style={{ color: "#9ca3af" }}>
+        <Plus className="w-3 h-3" />
+        <span style={{ fontSize: "0.7rem" }}>New chat</span>
+      </button>
+    </div>
+  );
+}
+
 function AgentButton({
   agent, active, hasHistory, onClick,
 }: {
@@ -205,6 +257,7 @@ export default function AIPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [sessionsList, setSessionsList] = useState<Record<string, SessionSummary[]>>({});
   const [kbFiles, setKbFiles] = useState<KnowledgeBaseFile[]>([]);
   const [kbUploading, setKbUploading] = useState(false);
   const [kbError, setKbError] = useState<string | null>(null);
@@ -256,6 +309,28 @@ export default function AIPage() {
   }, [currentTeamId, accessToken, sessionLoaded]);
 
   useEffect(() => { loadSession(activeAgentId); }, [activeAgentId, loadSession]);
+
+  const loadSessionsList = useCallback(async (agentId: string) => {
+    if (!currentTeamId || !accessToken) return;
+    try {
+      const res = await api.listSessions(currentTeamId, agentId, accessToken);
+      setSessionsList((prev) => ({ ...prev, [agentId]: res.sessions ?? [] }));
+    } catch { /* Non-fatal */ }
+  }, [currentTeamId, accessToken]);
+
+  useEffect(() => { loadSessionsList(activeAgentId); }, [activeAgentId, loadSessionsList]);
+
+  const openSession = async (sessionId: string, agentId: string) => {
+    if (!currentTeamId || !accessToken) return;
+    try {
+      const res = await api.loadSession(currentTeamId, sessionId, accessToken);
+      if (res.messages) {
+        setConversations((prev) => ({ ...prev, [agentId]: res.messages }));
+        setSessionIds((prev) => ({ ...prev, [agentId]: sessionId }));
+        setSessionLoaded((prev) => ({ ...prev, [agentId]: true }));
+      }
+    } catch { /* Non-fatal */ }
+  };
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -314,6 +389,7 @@ export default function AIPage() {
         [activeAgentId]: [...newMessages, { role: "assistant", content: reply }],
       }));
       if (sessionId) persistMessage(sessionId, "assistant", reply);
+      loadSessionsList(activeAgentId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to get a response.");
     } finally {
@@ -329,13 +405,16 @@ export default function AIPage() {
   const clearChat = () => {
     setConversations((prev) => ({ ...prev, [activeAgentId]: [] }));
     setSessionIds((prev) => { const n = { ...prev }; delete n[activeAgentId]; return n; });
-    setSessionLoaded((prev) => { const n = { ...prev }; delete n[activeAgentId]; return n; });
+    // Keep sessionLoaded=true so loadSession doesn't immediately re-fetch the old session
+    setSessionLoaded((prev) => ({ ...prev, [activeAgentId]: true }));
     setError(null);
   };
   const resetAll = () => {
+    const allLoaded: Record<string, boolean> = {};
+    AGENTS.forEach((a) => { allLoaded[a.id] = true; });
     setConversations({});
     setSessionIds({});
-    setSessionLoaded({});
+    setSessionLoaded(allLoaded);
     setError(null);
   };
 
@@ -415,10 +494,13 @@ export default function AIPage() {
           <div>
             <p className="px-2 mb-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: "#9ca3af" }}>Agents</p>
             {AGENTS.filter((a) => a.section === "agents").map((agent) => (
-              <AgentButton key={agent.id} agent={agent}
-                active={activeAgentId === agent.id}
-                hasHistory={(conversations[agent.id]?.length ?? 0) > 0}
-                onClick={() => { setActiveAgentId(agent.id); loadSession(agent.id); }} />
+              <div key={agent.id}>
+                <AgentButton agent={agent}
+                  active={activeAgentId === agent.id}
+                  hasHistory={(sessionsList[agent.id]?.length ?? 0) > 0}
+                  onClick={() => { setActiveAgentId(agent.id); loadSession(agent.id); loadSessionsList(agent.id); }} />
+                {activeAgentId === agent.id && <SessionHistory agentId={agent.id} sessionsList={sessionsList} sessionIds={sessionIds} openSession={openSession} clearChat={clearChat} />}
+              </div>
             ))}
           </div>
 
@@ -426,10 +508,13 @@ export default function AIPage() {
           <div>
             <p className="px-2 mb-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: "#9ca3af" }}>Specialized</p>
             {AGENTS.filter((a) => a.section === "specialized").map((agent) => (
-              <AgentButton key={agent.id} agent={agent}
-                active={activeAgentId === agent.id}
-                hasHistory={(conversations[agent.id]?.length ?? 0) > 0}
-                onClick={() => { setActiveAgentId(agent.id); loadSession(agent.id); }} />
+              <div key={agent.id}>
+                <AgentButton agent={agent}
+                  active={activeAgentId === agent.id}
+                  hasHistory={(sessionsList[agent.id]?.length ?? 0) > 0}
+                  onClick={() => { setActiveAgentId(agent.id); loadSession(agent.id); loadSessionsList(agent.id); }} />
+                {activeAgentId === agent.id && <SessionHistory agentId={agent.id} sessionsList={sessionsList} sessionIds={sessionIds} openSession={openSession} clearChat={clearChat} />}
+              </div>
             ))}
           </div>
 

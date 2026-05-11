@@ -5,7 +5,11 @@ import {
 } from "@/lib/api-helpers";
 
 // GET /api/teams/[teamId]/ai-sessions?agentId=hub
-// Returns the most recent session + its messages for a given agent
+//   → latest session + messages (for restore on load)
+// GET /api/teams/[teamId]/ai-sessions?agentId=hub&mode=list
+//   → last 10 sessions without messages (for sidebar history)
+// GET /api/teams/[teamId]/ai-sessions?sessionId=xxx
+//   → specific session + its messages (for clicking a past session)
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ teamId: string }> }
@@ -14,11 +18,52 @@ export async function GET(
   if (!user) return unauthorized();
 
   const { teamId } = await params;
-  const agentId = request.nextUrl.searchParams.get("agentId");
-  if (!agentId) return badRequest("agentId is required.");
+  const { searchParams } = request.nextUrl;
+  const agentId = searchParams.get("agentId");
+  const mode = searchParams.get("mode");
+  const sessionId = searchParams.get("sessionId");
 
   const supabase = getSupabaseAdmin();
 
+  // Load a specific session by ID
+  if (sessionId) {
+    const { data: session } = await supabase
+      .from("ai_chat_sessions")
+      .select("id, title, agent_id, created_at")
+      .eq("id", sessionId)
+      .eq("user_id", user.id)
+      .single();
+
+    if (!session) return success({ session: null, messages: [] });
+
+    const { data: messages, error } = await supabase
+      .from("ai_chat_messages")
+      .select("role, content")
+      .eq("session_id", session.id)
+      .order("created_at", { ascending: true });
+
+    if (error) return serverError(error.message);
+    return success({ session, messages: messages ?? [] });
+  }
+
+  if (!agentId) return badRequest("agentId or sessionId is required.");
+
+  // List mode — return recent sessions without messages
+  if (mode === "list") {
+    const { data, error } = await supabase
+      .from("ai_chat_sessions")
+      .select("id, title, updated_at")
+      .eq("team_id", teamId)
+      .eq("user_id", user.id)
+      .eq("agent_id", agentId)
+      .order("updated_at", { ascending: false })
+      .limit(10);
+
+    if (error) return serverError(error.message);
+    return success({ sessions: data ?? [] });
+  }
+
+  // Default — latest session + messages (restore on load)
   const { data: session } = await supabase
     .from("ai_chat_sessions")
     .select("id, title, created_at")
@@ -41,8 +86,7 @@ export async function GET(
   return success({ session, messages: messages ?? [] });
 }
 
-// POST /api/teams/[teamId]/ai-sessions
-// Create a new session
+// POST /api/teams/[teamId]/ai-sessions — create new session
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ teamId: string }> }

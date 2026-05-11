@@ -132,6 +132,10 @@ export const api = {
   // AI Chat Sessions
   getLatestSession: (teamId: string, agentId: string, token: string) =>
     apiFetch(`/teams/${teamId}/ai-sessions?agentId=${agentId}`, {}, token),
+  listSessions: (teamId: string, agentId: string, token: string) =>
+    apiFetch(`/teams/${teamId}/ai-sessions?agentId=${agentId}&mode=list`, {}, token),
+  loadSession: (teamId: string, sessionId: string, token: string) =>
+    apiFetch(`/teams/${teamId}/ai-sessions?sessionId=${sessionId}`, {}, token),
   createSession: (teamId: string, agentId: string, title: string, token: string) =>
     apiFetch(`/teams/${teamId}/ai-sessions`, { method: "POST", body: JSON.stringify({ agentId, title }) }, token),
   saveMessage: (teamId: string, sessionId: string, role: string, content: string, token: string) =>
