@@ -52,20 +52,20 @@ function getAssignees(task: Task, members: ReturnType<typeof useApp>["currentMem
 
 function AvatarStack({ assignees }: { assignees: { id: string; name: string }[] }) {
   if (assignees.length === 0)
-    return <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "#f3f4f6", color: "#9ca3af" }}>Unassigned</span>;
+    return <span className="text-sm px-2.5 py-1 rounded-full" style={{ background: "#f3f4f6", color: "#9ca3af" }}>Unassigned</span>;
   return (
-    <div className="flex items-center gap-1.5">
-      <div className="flex -space-x-1.5">
+    <div className="flex items-center gap-2">
+      <div className="flex -space-x-2">
         {assignees.slice(0, 3).map((a) => (
-          <div key={a.id} className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border-2 border-white" style={{ background: "#e0e7ff", color: "#4338ca" }} title={a.name}>
+          <div key={a.id} className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 border-white" style={{ background: "#e0e7ff", color: "#4338ca" }} title={a.name} aria-label={a.name}>
             {a.name.slice(0, 2).toUpperCase()}
           </div>
         ))}
         {assignees.length > 3 && (
-          <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border-2 border-white" style={{ background: "#f3f4f6", color: "#6b7280" }}>+{assignees.length - 3}</div>
+          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 border-white" style={{ background: "#f3f4f6", color: "#6b7280" }} aria-label={`${assignees.length - 3} more assignees`}>+{assignees.length - 3}</div>
         )}
       </div>
-      <span className="text-xs font-medium" style={{ color: "#374151" }}>
+      <span className="text-sm font-medium" style={{ color: "#374151" }}>
         {assignees.length === 1 ? assignees[0].name : `${assignees.length} assignees`}
       </span>
     </div>
@@ -162,29 +162,31 @@ function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () => void }
       <div className="flex-shrink-0 px-5 py-4 border-b" style={{ borderColor: "#e5e7eb" }}>
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1" style={{ background: STATUS_CONFIG[task.status].color }} />
-            <span className="text-xs font-semibold uppercase tracking-wide truncate" style={{ color: "#9ca3af" }}>
+            <div className="w-3 h-3 rounded-full flex-shrink-0 mt-0.5" style={{ background: STATUS_CONFIG[task.status].color }} />
+            <span className="text-sm font-semibold uppercase tracking-wide truncate" style={{ color: "#9ca3af" }}>
               {STATUS_CONFIG[task.status].label}
             </span>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
-            <button onClick={handleDelete} className="p-1.5 rounded-lg transition-colors hover:bg-red-50">
-              <Trash2 className="w-4 h-4" style={{ color: "#ef4444" }} />
+            <button onClick={handleDelete} aria-label="Delete task" className="p-2.5 rounded-xl transition-colors hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1" style={{ minWidth: 44, minHeight: 44 }}>
+              <Trash2 className="w-5 h-5" style={{ color: "#ef4444" }} />
             </button>
-            <button onClick={onClose} className="p-1.5 rounded-lg transition-colors hover:bg-gray-100">
-              <X className="w-4 h-4" style={{ color: "#6b7280" }} />
+            <button onClick={onClose} aria-label="Close task panel" className="p-2.5 rounded-xl transition-colors hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-1" style={{ minWidth: 44, minHeight: 44 }}>
+              <X className="w-5 h-5" style={{ color: "#6b7280" }} />
             </button>
           </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b flex-shrink-0" style={{ borderColor: "#e5e7eb" }}>
+      <div className="flex border-b flex-shrink-0" style={{ borderColor: "#e5e7eb" }} role="tablist">
         {(["details", "comments"] as const).map((tab) => (
           <button
             key={tab}
+            role="tab"
+            aria-selected={activeTab === tab}
             onClick={() => setActiveTab(tab)}
-            className="flex-1 py-2.5 text-sm font-medium capitalize"
+            className="flex-1 py-3.5 text-base font-medium capitalize focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-inset"
             style={{
               color: activeTab === tab ? "#f59e0b" : "#6b7280",
               borderBottom: activeTab === tab ? "2px solid #f59e0b" : "2px solid transparent",
@@ -193,7 +195,7 @@ function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () => void }
           >
             {tab}
             {tab === "comments" && (task.comments?.length ?? 0) > 0 && (
-              <span className="ml-1.5 text-xs px-1.5 py-0.5 rounded-full" style={{ background: "#f3f4f6", color: "#6b7280" }}>
+              <span className="ml-2 text-sm px-2 py-0.5 rounded-full" style={{ background: "#f3f4f6", color: "#6b7280" }}>
                 {task.comments!.length}
               </span>
             )}
@@ -208,72 +210,80 @@ function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () => void }
           <div className="p-5 space-y-5">
             {/* Title + Description (with Save) */}
             <div>
+              <label htmlFor="drawer-task-title" className="sr-only">Task title</label>
               <input
+                id="drawer-task-title"
                 value={title}
                 onChange={(e) => { setTitle(e.target.value); setIsDirty(true); }}
-                className="w-full text-lg font-semibold outline-none bg-transparent border-b-2 pb-1 transition-colors"
+                className="w-full text-xl font-semibold outline-none bg-transparent border-b-2 pb-2 transition-colors focus:ring-0"
                 style={{ color: "#111827", borderColor: isDirty ? "#f59e0b" : "#f0f0ea" }}
               />
+              <label htmlFor="drawer-task-desc" className="sr-only">Task description</label>
               <textarea
+                id="drawer-task-desc"
                 value={description}
                 onChange={(e) => { setDescription(e.target.value); setIsDirty(true); }}
                 placeholder="Add description..."
-                className="w-full mt-3 text-sm outline-none bg-transparent resize-none"
-                style={{ color: "#6b7280", lineHeight: 1.6, minHeight: 56 }}
+                className="w-full mt-3 text-base outline-none bg-transparent resize-none"
+                style={{ color: "#6b7280", lineHeight: 1.7, minHeight: 72 }}
                 rows={3}
               />
               {isDirty && (
-                <button onClick={handleSave} className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium" style={{ background: "#f59e0b", color: "#111827" }}>
-                  <Check className="w-3.5 h-3.5" /> Save
+                <button onClick={handleSave} className="mt-3 flex items-center gap-2 px-4 py-2.5 rounded-xl text-base font-medium focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-1" style={{ background: "#f59e0b", color: "#111827", minHeight: 44 }}>
+                  <Check className="w-4 h-4" /> Save changes
                 </button>
               )}
             </div>
 
             {/* Metadata rows */}
-            <div className="space-y-2.5">
+            <div className="space-y-4">
               {/* Status */}
               <div className="flex items-center gap-3">
-                <span className="text-xs font-semibold w-24 flex-shrink-0 uppercase tracking-wide" style={{ color: "#9ca3af" }}>Status</span>
+                <label htmlFor="drawer-status" className="text-sm font-semibold w-24 flex-shrink-0 uppercase tracking-wide" style={{ color: "#9ca3af" }}>Status</label>
                 <select
+                  id="drawer-status"
                   value={task.status}
                   onChange={(e) => updateTask(task.id, { status: e.target.value as TaskStatus })}
-                  className="flex-1 px-2.5 py-1.5 rounded-lg border text-sm outline-none font-medium"
-                  style={{ borderColor: "#e5e7eb", color: STATUS_CONFIG[task.status].color }}
+                  className="flex-1 px-3 py-2.5 rounded-xl border text-base outline-none font-medium focus:ring-2 focus:ring-amber-400"
+                  style={{ borderColor: "#e5e7eb", color: STATUS_CONFIG[task.status].color, minHeight: 44 }}
                 >
                   {STATUSES.map((s) => <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>)}
                 </select>
               </div>
               {/* Priority */}
               <div className="flex items-center gap-3">
-                <span className="text-xs font-semibold w-24 flex-shrink-0 uppercase tracking-wide" style={{ color: "#9ca3af" }}>Priority</span>
+                <label htmlFor="drawer-priority" className="text-sm font-semibold w-24 flex-shrink-0 uppercase tracking-wide" style={{ color: "#9ca3af" }}>Priority</label>
                 <select
+                  id="drawer-priority"
                   value={task.priority}
                   onChange={(e) => updateTask(task.id, { priority: e.target.value as TaskPriority })}
-                  className="flex-1 px-2.5 py-1.5 rounded-lg border text-sm outline-none font-medium"
-                  style={{ borderColor: "#e5e7eb", color: PRIORITY_COLORS[task.priority] }}
+                  className="flex-1 px-3 py-2.5 rounded-xl border text-base outline-none font-medium focus:ring-2 focus:ring-amber-400"
+                  style={{ borderColor: "#e5e7eb", color: PRIORITY_COLORS[task.priority], minHeight: 44 }}
                 >
                   {(["Low", "Medium", "High"] as TaskPriority[]).map((p) => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
               {/* Due Date */}
               <div className="flex items-center gap-3">
-                <span className="text-xs font-semibold w-24 flex-shrink-0 uppercase tracking-wide" style={{ color: "#9ca3af" }}>Due Date</span>
+                <label htmlFor="drawer-duedate" className="text-sm font-semibold w-24 flex-shrink-0 uppercase tracking-wide" style={{ color: "#9ca3af" }}>Due Date</label>
                 <input
+                  id="drawer-duedate"
                   type="date"
                   value={task.dueDate ? new Date(task.dueDate).toISOString().split("T")[0] : ""}
                   onChange={(e) => updateTask(task.id, { dueDate: e.target.value || "" })}
-                  className="flex-1 px-2.5 py-1.5 rounded-lg border text-sm outline-none"
-                  style={{ borderColor: "#e5e7eb", color: isOverdue ? "#dc2626" : "#374151" }}
+                  className="flex-1 px-3 py-2.5 rounded-xl border text-base outline-none focus:ring-2 focus:ring-amber-400"
+                  style={{ borderColor: "#e5e7eb", color: isOverdue ? "#dc2626" : "#374151", minHeight: 44 }}
                 />
               </div>
               {/* Project */}
               <div className="flex items-center gap-3">
-                <span className="text-xs font-semibold w-24 flex-shrink-0 uppercase tracking-wide" style={{ color: "#9ca3af" }}>Project</span>
+                <label htmlFor="drawer-project" className="text-sm font-semibold w-24 flex-shrink-0 uppercase tracking-wide" style={{ color: "#9ca3af" }}>Project</label>
                 <select
+                  id="drawer-project"
                   value={task.projectId || ""}
                   onChange={(e) => updateTask(task.id, { projectId: e.target.value })}
-                  className="flex-1 px-2.5 py-1.5 rounded-lg border text-sm outline-none"
-                  style={{ borderColor: "#e5e7eb", color: "#374151" }}
+                  className="flex-1 px-3 py-2.5 rounded-xl border text-base outline-none focus:ring-2 focus:ring-amber-400"
+                  style={{ borderColor: "#e5e7eb", color: "#374151", minHeight: 44 }}
                 >
                   <option value="">No project</option>
                   {currentProjects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -281,43 +291,49 @@ function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () => void }
               </div>
               {/* Assignees */}
               <div className="flex items-start gap-3">
-                <span className="text-xs font-semibold w-24 flex-shrink-0 uppercase tracking-wide pt-1" style={{ color: "#9ca3af" }}>Assignees</span>
-                <div className="flex-1 space-y-1">
+                <span className="text-sm font-semibold w-24 flex-shrink-0 uppercase tracking-wide pt-2" style={{ color: "#9ca3af" }}>Assignees</span>
+                <div className="flex-1 space-y-2">
                   {currentMembers.map((m) => {
                     const memberId = m.userId || m.id;
                     const isAssigned = task.assigneeIds?.includes(memberId) || task.assigneeIds?.includes(m.id);
                     return (
-                      <label key={m.id} className="flex items-center gap-2 cursor-pointer select-none">
+                      <label key={m.id} className="flex items-center gap-3 cursor-pointer select-none py-1">
                         <input
                           type="checkbox"
                           checked={!!isAssigned}
                           onChange={() => toggleAssignee(memberId, !!isAssigned)}
-                          className="rounded"
+                          className="w-5 h-5 rounded focus:ring-2 focus:ring-amber-400"
                         />
-                        <span className="text-sm" style={{ color: "#374151" }}>{m.name}</span>
-                        <span className="text-xs" style={{ color: "#9ca3af" }}>{m.role}</span>
+                        <span className="text-base" style={{ color: "#374151" }}>{m.name}</span>
+                        <span className="text-sm" style={{ color: "#9ca3af" }}>{m.role}</span>
                       </label>
                     );
                   })}
-                  {currentMembers.length === 0 && <p className="text-xs" style={{ color: "#9ca3af" }}>No members</p>}
+                  {currentMembers.length === 0 && <p className="text-sm" style={{ color: "#9ca3af" }}>No members</p>}
                 </div>
               </div>
               {/* Tags */}
               <div className="flex items-start gap-3">
-                <span className="text-xs font-semibold w-24 flex-shrink-0 uppercase tracking-wide pt-1" style={{ color: "#9ca3af" }}>Tags</span>
+                <span className="text-sm font-semibold w-24 flex-shrink-0 uppercase tracking-wide pt-2" style={{ color: "#9ca3af" }}>Tags</span>
                 <div className="flex-1">
-                  <div className="flex flex-wrap gap-1 mb-2">
+                  <div className="flex flex-wrap gap-2 mb-3">
                     {(task.tags || []).map((t) => (
-                      <span key={t} className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs" style={{ background: "#f3f4f6", color: "#374151" }}>
+                      <span key={t} className="flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full text-sm" style={{ background: "#f3f4f6", color: "#374151" }}>
                         {t}
-                        <button onClick={() => updateTask(task.id, { tags: task.tags?.filter((x) => x !== t) || [] })}>
-                          <X className="w-2.5 h-2.5" style={{ color: "#9ca3af" }} />
+                        <button
+                          aria-label={`Remove tag ${t}`}
+                          onClick={() => updateTask(task.id, { tags: task.tags?.filter((x) => x !== t) || [] })}
+                          className="flex items-center justify-center w-5 h-5 rounded-full hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                        >
+                          <X className="w-3 h-3" style={{ color: "#6b7280" }} />
                         </button>
                       </span>
                     ))}
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex gap-2">
+                    <label htmlFor="drawer-newtag" className="sr-only">New tag</label>
                     <input
+                      id="drawer-newtag"
                       value={newTag}
                       onChange={(e) => setNewTag(e.target.value)}
                       onKeyDown={(e) => {
@@ -327,13 +343,13 @@ function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () => void }
                         }
                       }}
                       placeholder="Add tag..."
-                      className="flex-1 px-2.5 py-1 rounded-lg border text-xs outline-none"
-                      style={{ borderColor: "#e5e7eb" }}
+                      className="flex-1 px-3 py-2.5 rounded-xl border text-base outline-none focus:ring-2 focus:ring-amber-400"
+                      style={{ borderColor: "#e5e7eb", minHeight: 44 }}
                     />
                     <button
                       onClick={() => { if (newTag.trim()) { updateTask(task.id, { tags: [...(task.tags || []), newTag.trim()] }); setNewTag(""); } }}
-                      className="px-2.5 py-1 rounded-lg text-xs"
-                      style={{ background: "#f3f4f6", color: "#374151" }}
+                      className="px-4 py-2.5 rounded-xl text-base font-medium focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      style={{ background: "#f3f4f6", color: "#374151", minHeight: 44 }}
                     >Add</button>
                   </div>
                 </div>
