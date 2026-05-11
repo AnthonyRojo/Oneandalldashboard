@@ -5,6 +5,7 @@ import {
   Sparkles, Send, Loader2, RotateCcw, Copy, Check,
   Paperclip, X, FileText, Layers, CheckSquare, Megaphone,
   ClipboardList, PenTool, BarChart2, Plus, BookOpen, Trash2,
+  Image as ImageIcon,
 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { api } from "@/lib/api";
@@ -42,6 +43,14 @@ function timeAgo(dateStr: string) {
 interface Message {
   role: "user" | "assistant";
   content: string;
+  imageData?: string;     // base64, no data-URI prefix
+  imageMimeType?: string; // e.g. "image/jpeg"
+}
+
+interface PendingImage {
+  data: string;
+  mimeType: string;
+  previewUrl: string;
 }
 
 interface Suggestion {
@@ -273,9 +282,11 @@ export default function AIPage() {
   const [kbFiles, setKbFiles] = useState<KnowledgeBaseFile[]>([]);
   const [kbUploading, setKbUploading] = useState(false);
   const [kbError, setKbError] = useState<string | null>(null);
+  const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const kbFileInputRef = useRef<HTMLInputElement>(null);
 
   const activeAgent = AGENTS.find((a) => a.id === activeAgentId) ?? AGENTS[0];
@@ -373,9 +384,17 @@ export default function AIPage() {
 
   const send = async (text: string) => {
     const trimmed = text.trim();
-    if (!trimmed || loading) return;
+    if ((!trimmed && !pendingImage) || loading) return;
 
-    const newMessages: Message[] = [...messages, { role: "user", content: trimmed }];
+    const img = pendingImage;
+    setPendingImage(null);
+
+    const userMsg: Message = {
+      role: "user",
+      content: trimmed,
+      ...(img ? { imageData: img.data, imageMimeType: img.mimeType } : {}),
+    };
+    const newMessages: Message[] = [...messages, userMsg];
     setConversations((prev) => ({ ...prev, [activeAgentId]: newMessages }));
     setInput("");
     setLoading(true);
@@ -385,7 +404,7 @@ export default function AIPage() {
     let sessionId = sessionIds[activeAgentId];
     if (!sessionId && currentTeamId && accessToken) {
       try {
-        const title = trimmed.slice(0, 60);
+        const title = (trimmed || "Image").slice(0, 60);
         const res = await api.createSession(currentTeamId, activeAgentId, title, accessToken);
         sessionId = res.session.id;
         setSessionIds((prev) => ({ ...prev, [activeAgentId]: sessionId }));
@@ -393,18 +412,24 @@ export default function AIPage() {
         // Non-fatal
       }
     }
-    if (sessionId) persistMessage(sessionId, "user", trimmed);
+    // Persist text only — image data is too large for DB
+    if (sessionId) persistMessage(sessionId, "user", trimmed || "(image)");
 
     const fileContext = uploadedFiles.length > 0
       ? uploadedFiles.map((f) => `=== ${f.name} ===\n${f.content}`).join("\n\n")
       : undefined;
+
+    // Strip image data from history messages — only the current message carries the image
+    const apiMessages = newMessages.map((m, i) =>
+      i === newMessages.length - 1 ? m : { role: m.role, content: m.content }
+    );
 
     try {
       const res = await fetch("/api/ai", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          messages: newMessages,
+          messages: apiMessages,
           systemPrompt: activeAgent.systemPrompt,
           fileContext,
           teamId: currentTeamId,
@@ -461,6 +486,21 @@ export default function AIPage() {
       reader.readAsText(file);
     });
     e.target.value = "";
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { setError("Image must be under 5 MB."); return; }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      const [prefix, data] = dataUrl.split(",");
+      const mimeType = prefix.split(":")[1].split(";")[0];
+      setPendingImage({ data, mimeType, previewUrl: dataUrl });
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleKbUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -592,9 +632,6 @@ export default function AIPage() {
           {/* Session files — temporary */}
           <div>
             <p className="px-2 mb-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: "#9ca3af" }}>Session Files</p>
-            <input ref={fileInputRef} type="file" multiple className="hidden"
-              accept=".txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.html,.css,.xml,.yaml,.yml"
-              onChange={handleFileUpload} />
             <button onClick={() => fileInputRef.current?.click()}
               className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left transition-colors hover:bg-gray-50"
               style={{ color: "#6b7280", border: "1px dashed #d1d5db" }}>
@@ -719,16 +756,31 @@ export default function AIPage() {
                         : <AgentIcon className="w-3.5 h-3.5" />}
                     </div>
                     <div className={`max-w-[75%] flex flex-col gap-1 ${isUser ? "items-end" : "items-start"}`}>
-                      <div className="px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap"
-                        style={{
-                          background: isUser ? "#111827" : "white",
-                          color: isUser ? "white" : "#111827",
-                          border: isUser ? "none" : "1px solid #e5e7eb",
-                          borderBottomRightRadius: isUser ? 4 : undefined,
-                          borderBottomLeftRadius: isUser ? undefined : 4,
-                        }}>
-                        {msg.content}
-                      </div>
+                      {msg.imageData && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={`data:${msg.imageMimeType};base64,${msg.imageData}`}
+                          alt="attached"
+                          className="rounded-2xl object-cover"
+                          style={{
+                            maxWidth: 260, maxHeight: 200,
+                            borderBottomRightRadius: isUser ? 4 : undefined,
+                            borderBottomLeftRadius: isUser ? undefined : 4,
+                          }}
+                        />
+                      )}
+                      {msg.content && (
+                        <div className="px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap"
+                          style={{
+                            background: isUser ? "#111827" : "white",
+                            color: isUser ? "white" : "#111827",
+                            border: isUser ? "none" : "1px solid #e5e7eb",
+                            borderBottomRightRadius: isUser ? 4 : undefined,
+                            borderBottomLeftRadius: isUser ? undefined : 4,
+                          }}>
+                          {msg.content}
+                        </div>
+                      )}
                       {!isUser && <CopyButton text={msg.content} />}
                     </div>
                   </div>
@@ -764,35 +816,67 @@ export default function AIPage() {
         {/* Input */}
         <div className="px-6 py-4 border-t flex-shrink-0" style={{ background: "white", borderColor: "#e5e7eb" }}>
           <div className="max-w-2xl mx-auto">
-            <div className="flex items-end gap-2 px-4 py-3 rounded-2xl border transition-colors focus-within:border-gray-300"
+            <div className="flex flex-col gap-2 px-4 py-3 rounded-2xl border transition-colors focus-within:border-gray-300"
               style={{ background: "#f9f9f6", borderColor: "#e5e7eb" }}>
-              <button onClick={() => fileInputRef.current?.click()} title="Attach file"
-                className="flex-shrink-0 mb-0.5 p-1.5 rounded-lg hover:bg-gray-200 transition-colors"
-                style={{ color: "#9ca3af" }}>
-                <Paperclip className="w-4 h-4" />
-              </button>
-              <textarea ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={`Ask ${activeAgent.label}…`}
-                rows={1}
-                className="flex-1 resize-none outline-none bg-transparent text-sm leading-relaxed"
-                style={{ color: "#111827", maxHeight: 160 }}
-                onInput={(e) => {
-                  const el = e.currentTarget;
-                  el.style.height = "auto";
-                  el.style.height = `${el.scrollHeight}px`;
-                }}
-                autoFocus />
-              <button onClick={() => send(input)} disabled={!input.trim() || loading}
-                className="flex-shrink-0 w-7 h-7 rounded-xl flex items-center justify-center transition-all mb-0.5"
-                style={{
-                  background: input.trim() && !loading ? "#111827" : "#e5e7eb",
-                  color: input.trim() && !loading ? "white" : "#9ca3af",
-                }}>
-                {loading
-                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  : <Send className="w-3.5 h-3.5" />}
-              </button>
+
+              {/* Pending image preview */}
+              {pendingImage && (
+                <div className="flex items-start gap-2">
+                  <div className="relative inline-flex">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={pendingImage.previewUrl} alt="preview"
+                      className="h-20 w-20 object-cover rounded-xl border"
+                      style={{ borderColor: "#e5e7eb" }} />
+                    <button onClick={() => setPendingImage(null)}
+                      className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full flex items-center justify-center"
+                      style={{ background: "#374151", color: "white" }}>
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Input row */}
+              <div className="flex items-end gap-2">
+                <input ref={fileInputRef} type="file" multiple className="hidden"
+                  accept=".txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.html,.css,.xml,.yaml,.yml"
+                  onChange={handleFileUpload} />
+                <input ref={imageInputRef} type="file" className="hidden"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  onChange={handleImageSelect} />
+                <button onClick={() => fileInputRef.current?.click()} title="Attach file"
+                  className="flex-shrink-0 mb-0.5 p-1.5 rounded-lg hover:bg-gray-200 transition-colors"
+                  style={{ color: "#9ca3af" }}>
+                  <Paperclip className="w-4 h-4" />
+                </button>
+                <button onClick={() => imageInputRef.current?.click()} title="Attach image"
+                  className="flex-shrink-0 mb-0.5 p-1.5 rounded-lg hover:bg-gray-200 transition-colors"
+                  style={{ color: pendingImage ? "#3b82f6" : "#9ca3af" }}>
+                  <ImageIcon className="w-4 h-4" />
+                </button>
+                <textarea ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={pendingImage ? "Add a caption or just send the image…" : `Ask ${activeAgent.label}…`}
+                  rows={1}
+                  className="flex-1 resize-none outline-none bg-transparent text-sm leading-relaxed"
+                  style={{ color: "#111827", maxHeight: 160 }}
+                  onInput={(e) => {
+                    const el = e.currentTarget;
+                    el.style.height = "auto";
+                    el.style.height = `${el.scrollHeight}px`;
+                  }}
+                  autoFocus />
+                <button onClick={() => send(input)} disabled={(!input.trim() && !pendingImage) || loading}
+                  className="flex-shrink-0 w-7 h-7 rounded-xl flex items-center justify-center transition-all mb-0.5"
+                  style={{
+                    background: (input.trim() || pendingImage) && !loading ? "#111827" : "#e5e7eb",
+                    color: (input.trim() || pendingImage) && !loading ? "white" : "#9ca3af",
+                  }}>
+                  {loading
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : <Send className="w-3.5 h-3.5" />}
+                </button>
+              </div>
             </div>
             <p className="text-center mt-2" style={{ color: "#9ca3af", fontSize: "0.65rem" }}>
               ↑ send &nbsp;·&nbsp; shift+↑ new line

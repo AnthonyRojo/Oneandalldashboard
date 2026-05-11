@@ -2,13 +2,33 @@ import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 import { getSupabaseAdmin } from "@/lib/api-helpers";
 
-type Message = { role: string; content: string };
+type Message = {
+  role: string;
+  content: string;
+  imageData?: string;
+  imageMimeType?: string;
+};
+
+type ClaudeContent =
+  | { type: "text"; text: string }
+  | { type: "image"; source: { type: "base64"; media_type: string; data: string } };
 
 async function callClaude(
   messages: Message[],
   system: string,
   apiKey: string
 ): Promise<string> {
+  const claudeMessages = messages.map((m) => {
+    if (m.imageData && m.imageMimeType) {
+      const parts: ClaudeContent[] = [
+        { type: "image", source: { type: "base64", media_type: m.imageMimeType, data: m.imageData } },
+      ];
+      if (m.content) parts.push({ type: "text", text: m.content });
+      return { role: m.role, content: parts };
+    }
+    return { role: m.role, content: m.content };
+  });
+
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -21,7 +41,7 @@ async function callClaude(
       model: "claude-sonnet-4-6",
       max_tokens: 1024,
       system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
-      messages,
+      messages: claudeMessages,
     }),
   });
   if (!res.ok) throw new Error(`Anthropic ${res.status}: ${await res.text()}`);
@@ -35,10 +55,15 @@ async function callGemini(
   apiKey: string
 ): Promise<string> {
   const ai = new GoogleGenAI({ apiKey });
-  const contents = messages.map((m) => ({
-    role: m.role === "assistant" ? "model" : "user",
-    parts: [{ text: m.content }],
-  }));
+  const contents = messages.map((m) => {
+    const parts: { text?: string; inlineData?: { mimeType: string; data: string } }[] = [];
+    if (m.imageData && m.imageMimeType) {
+      parts.push({ inlineData: { mimeType: m.imageMimeType, data: m.imageData } });
+    }
+    if (m.content) parts.push({ text: m.content });
+    if (parts.length === 0) parts.push({ text: "" });
+    return { role: m.role === "assistant" ? "model" : "user", parts };
+  });
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
     contents,
