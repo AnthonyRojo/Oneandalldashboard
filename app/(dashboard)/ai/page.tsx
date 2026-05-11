@@ -190,6 +190,9 @@ export default function AIPage() {
   const { currentUser, currentTeamId, accessToken } = useApp();
   const [activeAgentId, setActiveAgentId] = useState("hub");
   const [conversations, setConversations] = useState<Record<string, Message[]>>({});
+  const [sessionIds, setSessionIds] = useState<Record<string, string>>({});
+  const [sessionLoaded, setSessionLoaded] = useState<Record<string, boolean>>({});
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -220,9 +223,34 @@ export default function AIPage() {
 
   useEffect(() => { fetchKb(); }, [fetchKb]);
 
+  const loadSession = useCallback(async (agentId: string) => {
+    if (!currentTeamId || !accessToken) return;
+    if (sessionLoaded[agentId]) return;
+    setHistoryLoading(true);
+    try {
+      const res = await api.getLatestSession(currentTeamId, agentId, accessToken);
+      if (res.session && res.messages.length > 0) {
+        setConversations((prev) => ({ ...prev, [agentId]: res.messages }));
+        setSessionIds((prev) => ({ ...prev, [agentId]: res.session.id }));
+      }
+    } catch {
+      // Non-fatal — just start fresh
+    } finally {
+      setSessionLoaded((prev) => ({ ...prev, [agentId]: true }));
+      setHistoryLoading(false);
+    }
+  }, [currentTeamId, accessToken, sessionLoaded]);
+
+  useEffect(() => { loadSession(activeAgentId); }, [activeAgentId, loadSession]);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  const persistMessage = (sessionId: string, role: string, content: string) => {
+    if (!currentTeamId || !accessToken) return;
+    api.saveMessage(currentTeamId, sessionId, role, content, accessToken).catch(() => {});
+  };
 
   const send = async (text: string) => {
     const trimmed = text.trim();
@@ -233,6 +261,20 @@ export default function AIPage() {
     setInput("");
     setLoading(true);
     setError(null);
+
+    // Resolve or create a session ID, then persist user message
+    let sessionId = sessionIds[activeAgentId];
+    if (!sessionId && currentTeamId && accessToken) {
+      try {
+        const title = trimmed.slice(0, 60);
+        const res = await api.createSession(currentTeamId, activeAgentId, title, accessToken);
+        sessionId = res.session.id;
+        setSessionIds((prev) => ({ ...prev, [activeAgentId]: sessionId }));
+      } catch {
+        // Non-fatal
+      }
+    }
+    if (sessionId) persistMessage(sessionId, "user", trimmed);
 
     const fileContext = uploadedFiles.length > 0
       ? uploadedFiles.map((f) => `=== ${f.name} ===\n${f.content}`).join("\n\n")
@@ -251,10 +293,12 @@ export default function AIPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong.");
+      const reply = data.text as string;
       setConversations((prev) => ({
         ...prev,
-        [activeAgentId]: [...newMessages, { role: "assistant", content: data.text }],
+        [activeAgentId]: [...newMessages, { role: "assistant", content: reply }],
       }));
+      if (sessionId) persistMessage(sessionId, "assistant", reply);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to get a response.");
     } finally {
@@ -267,8 +311,18 @@ export default function AIPage() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); }
   };
 
-  const clearChat = () => { setConversations((prev) => ({ ...prev, [activeAgentId]: [] })); setError(null); };
-  const resetAll = () => { setConversations({}); setError(null); };
+  const clearChat = () => {
+    setConversations((prev) => ({ ...prev, [activeAgentId]: [] }));
+    setSessionIds((prev) => { const n = { ...prev }; delete n[activeAgentId]; return n; });
+    setSessionLoaded((prev) => { const n = { ...prev }; delete n[activeAgentId]; return n; });
+    setError(null);
+  };
+  const resetAll = () => {
+    setConversations({});
+    setSessionIds({});
+    setSessionLoaded({});
+    setError(null);
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     Array.from(e.target.files ?? []).forEach((file) => {
@@ -349,7 +403,7 @@ export default function AIPage() {
               <AgentButton key={agent.id} agent={agent}
                 active={activeAgentId === agent.id}
                 hasHistory={(conversations[agent.id]?.length ?? 0) > 0}
-                onClick={() => setActiveAgentId(agent.id)} />
+                onClick={() => { setActiveAgentId(agent.id); loadSession(agent.id); }} />
             ))}
           </div>
 
@@ -360,7 +414,7 @@ export default function AIPage() {
               <AgentButton key={agent.id} agent={agent}
                 active={activeAgentId === agent.id}
                 hasHistory={(conversations[agent.id]?.length ?? 0) > 0}
-                onClick={() => setActiveAgentId(agent.id)} />
+                onClick={() => { setActiveAgentId(agent.id); loadSession(agent.id); }} />
             ))}
           </div>
 
@@ -479,7 +533,12 @@ export default function AIPage() {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-6 py-6">
-          {isEmpty ? (
+          {isEmpty && historyLoading ? (
+            <div className="flex items-center justify-center h-full gap-2" style={{ color: "#9ca3af" }}>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span className="text-sm">Restoring conversation…</span>
+            </div>
+          ) : isEmpty ? (
             <div className="flex flex-col items-center justify-center h-full gap-6">
               <div className="text-center">
                 <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-3"

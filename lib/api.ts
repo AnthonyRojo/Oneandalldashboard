@@ -129,6 +129,14 @@ export const api = {
   createChatGroup: (teamId: string, name: string, memberIds: string[], token: string) =>
     apiFetch(`/teams/${teamId}/chat-groups`, { method: "POST", body: JSON.stringify({ name, memberIds }) }, token),
 
+  // AI Chat Sessions
+  getLatestSession: (teamId: string, agentId: string, token: string) =>
+    apiFetch(`/teams/${teamId}/ai-sessions?agentId=${agentId}`, {}, token),
+  createSession: (teamId: string, agentId: string, title: string, token: string) =>
+    apiFetch(`/teams/${teamId}/ai-sessions`, { method: "POST", body: JSON.stringify({ agentId, title }) }, token),
+  saveMessage: (teamId: string, sessionId: string, role: string, content: string, token: string) =>
+    apiFetch(`/teams/${teamId}/ai-sessions/${sessionId}/messages`, { method: "POST", body: JSON.stringify({ role, content }) }, token),
+
   // Knowledge Base
   getKnowledgeBase: (teamId: string, token: string) =>
     apiFetch(`/teams/${teamId}/knowledge-base`, {}, token),
