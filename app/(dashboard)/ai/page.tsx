@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import { useApp, type TeamMember, type Task, type Project, type CalendarEvent, type Announcement } from "@/context/AppContext";
 import { api } from "@/lib/api";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface UploadedFile {
   id: string;
@@ -194,6 +196,49 @@ function CopyButton({ text }: { text: string }) {
         ? <Check className="w-3.5 h-3.5" style={{ color: "#22c55e" }} />
         : <Copy className="w-3.5 h-3.5" />}
     </button>
+  );
+}
+
+function MarkdownContent({ content, isUser }: { content: string; isUser: boolean }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        p: ({ children }) => <p className="mb-1 last:mb-0 leading-relaxed">{children}</p>,
+        h1: ({ children }) => <h1 className="text-base font-bold mt-3 mb-1 first:mt-0">{children}</h1>,
+        h2: ({ children }) => <h2 className="text-sm font-bold mt-3 mb-1 first:mt-0">{children}</h2>,
+        h3: ({ children }) => <h3 className="text-sm font-semibold mt-2 mb-0.5 first:mt-0">{children}</h3>,
+        strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+        em: ({ children }) => <em className="italic">{children}</em>,
+        ul: ({ children }) => <ul className="list-disc pl-4 mb-1 space-y-0.5">{children}</ul>,
+        ol: ({ children }) => <ol className="list-decimal pl-4 mb-1 space-y-0.5">{children}</ol>,
+        li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+        code: ({ children, className }) => {
+          const isBlock = className?.includes("language-");
+          return isBlock
+            ? <code className="block">{children}</code>
+            : <code className="px-1 py-0.5 rounded text-xs font-mono" style={{ background: isUser ? "rgba(255,255,255,0.15)" : "#f3f4f6" }}>{children}</code>;
+        },
+        pre: ({ children }) => (
+          <pre className="px-3 py-2 rounded-xl text-xs font-mono overflow-x-auto mb-1" style={{ background: isUser ? "rgba(255,255,255,0.12)" : "#f3f4f6" }}>
+            {children}
+          </pre>
+        ),
+        blockquote: ({ children }) => (
+          <blockquote className="border-l-2 pl-3 italic opacity-80 mb-1" style={{ borderColor: isUser ? "rgba(255,255,255,0.4)" : "#d1d5db" }}>
+            {children}
+          </blockquote>
+        ),
+        hr: () => <hr className="my-2 opacity-20" />,
+        a: ({ href, children }) => (
+          <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 opacity-90 hover:opacity-100">
+            {children}
+          </a>
+        ),
+      }}
+    >
+      {content}
+    </ReactMarkdown>
   );
 }
 
@@ -909,7 +954,7 @@ export default function AIPage() {
                         </div>
                       )}
                       {msg.content && (
-                        <div className="px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap"
+                        <div className="px-4 py-3 rounded-2xl text-sm"
                           style={{
                             background: isUser ? "#111827" : "white",
                             color: isUser ? "white" : "#111827",
@@ -917,7 +962,9 @@ export default function AIPage() {
                             borderBottomRightRadius: isUser ? 4 : undefined,
                             borderBottomLeftRadius: isUser ? undefined : 4,
                           }}>
-                          {msg.content}
+                          {isUser
+                            ? <span className="leading-relaxed whitespace-pre-wrap">{msg.content}</span>
+                            : <MarkdownContent content={msg.content} isUser={false} />}
                         </div>
                       )}
                       {!isUser && <CopyButton text={msg.content} />}
