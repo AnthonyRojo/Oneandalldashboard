@@ -532,6 +532,10 @@ export default function AIPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong.");
       const reply = data.text as string;
+      // If the server switched to Claude for image analysis, update the badge
+      if (data.usedProvider && data.usedProvider !== provider) {
+        setProviderPerAgent((prev) => ({ ...prev, [activeAgentId]: data.usedProvider }));
+      }
       setConversations((prev) => ({
         ...prev,
         [activeAgentId]: [...newMessages, { role: "assistant", content: reply }],

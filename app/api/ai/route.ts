@@ -102,10 +102,14 @@ export async function POST(request: NextRequest) {
   const claudeKey = process.env.ANTHROPIC_API_KEY;
   const geminiKey = process.env.GEMINI_API_KEY;
 
-  if (provider === "gemini" && !geminiKey) {
+  // Gemini preview models don't support multimodal via API — force Claude for image requests
+  const hasImages = messages.some((m: Message) => m.images && m.images.length > 0);
+  const effectiveProvider = hasImages ? "claude" : provider;
+
+  if (effectiveProvider === "gemini" && !geminiKey) {
     return NextResponse.json({ error: "Gemini is not configured yet. Add GEMINI_API_KEY to your environment." }, { status: 503 });
   }
-  if (provider === "claude" && !claudeKey) {
+  if (effectiveProvider === "claude" && !claudeKey) {
     return NextResponse.json({ error: "Claude is not configured yet. Add ANTHROPIC_API_KEY to your environment." }, { status: 503 });
   }
 
@@ -143,10 +147,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const text =
-      provider === "gemini"
+      effectiveProvider === "gemini"
         ? await callGemini(messages, system, geminiKey!)
         : await callClaude(messages, system, claudeKey!);
-    return NextResponse.json({ text });
+    if (!text.trim()) throw new Error("The AI returned an empty response. Try again.");
+    return NextResponse.json({ text, usedProvider: effectiveProvider });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("AI error:", msg);
