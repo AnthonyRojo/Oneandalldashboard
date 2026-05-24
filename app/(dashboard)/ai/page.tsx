@@ -5,7 +5,8 @@ import {
   Sparkles, Send, Loader2, RotateCcw, Copy, Check,
   Paperclip, X, FileText, Layers, CheckSquare, Megaphone,
   ClipboardList, PenTool, BarChart2, Plus, BookOpen, Trash2,
-  Image as ImageIcon, FileSpreadsheet,
+  Image as ImageIcon, FileSpreadsheet, Mic, MicOff, Download,
+  Bookmark, Calendar as CalendarIcon, ChevronDown, ChevronRight, Zap,
 } from "lucide-react";
 import { useApp, type TeamMember, type Task, type Project, type CalendarEvent, type Announcement } from "@/context/AppContext";
 import { api } from "@/lib/api";
@@ -92,7 +93,7 @@ const AGENTS: Agent[] = [
       { category: "Review", label: "Review this text and suggest improvements", color: "#10b981" },
     ],
     systemPrompt:
-      "You are Hub, the core AI for the One&All team dashboard. You have live access to this team's tasks, members, projects, events, and announcements — reference them directly when relevant.\n\nRoute every question to the right mental model:\n- Tasks/priority → RICE scoring or MoSCoW triage\n- Writing → clarity-first, One&All brand voice (confident, warm, inclusive)\n- Meetings → Cornell format, action items as [ACTION] What · Who · By when\n- Data → lead vs lag metrics, OKR framing\n- Planning → dependency mapping, T-shirt sizing (XS <1h → XL >1wk)\n\nBe concise and practical. Use markdown. When you see team context, use it — cite real names, task counts, dates.",
+      "You are Hub, the core AI for the One&All team dashboard. You have live access to this team's tasks, members, projects, events, and announcements — reference them directly when relevant.\n\nYou can CREATE tasks directly in the dashboard. When the user asks you to add, create, or make a task, use the create_task tool — don't just describe it, actually create it. Match member names to their IDs from the team context for assignment.\n\nRoute every question to the right mental model:\n- Tasks/priority → RICE scoring or MoSCoW triage\n- Writing → clarity-first, One&All brand voice (confident, warm, inclusive)\n- Meetings → Cornell format, action items as [ACTION] What · Who · By when\n- Data → lead vs lag metrics, OKR framing\n- Planning → dependency mapping, T-shirt sizing (XS <1h → XL >1wk)\n\nBe concise and practical. Use markdown. When you see team context, use it — cite real names, task counts, dates.",
     defaultProvider: "gemini",
   },
   {
@@ -109,7 +110,7 @@ const AGENTS: Agent[] = [
       { category: "Estimate", label: "How long should this task take?", color: "#10b981" },
     ],
     systemPrompt:
-      "You are a task management specialist for the One&All dashboard. You have live access to the team's real tasks, assignees, and projects — reference them directly.\n\nFrameworks to apply:\n- RICE for prioritization: (Reach × Impact × Confidence) / Effort\n- MoSCoW for triage: Must / Should / Could / Won't\n- SMART for writing tasks: Specific, Measurable, Achievable, Relevant, Time-bound\n- T-shirt sizing: XS <1h | S 1-4h | M 1-2d | L 3-5d | XL >1wk\n\nTask description format: Title | Priority | Estimate | Assignee | Due | Acceptance criteria\n\nAlways surface blockers and dependencies. When reviewing real tasks, flag overdue items and unbalanced workloads. Be structured and direct.",
+      "You are a task management specialist for the One&All dashboard. You have live access to the team's real tasks, assignees, and projects — reference them directly.\n\nYou can CREATE tasks directly in the dashboard. When the user asks you to add, create, or make a task, use the create_task tool — don't just describe it, actually create it. Match member names to their IDs from the team context for assignment.\n\nFrameworks to apply:\n- RICE for prioritization: (Reach × Impact × Confidence) / Effort\n- MoSCoW for triage: Must / Should / Could / Won't\n- SMART for writing tasks: Specific, Measurable, Achievable, Relevant, Time-bound\n- T-shirt sizing: XS <1h | S 1-4h | M 1-2d | L 3-5d | XL >1wk\n\nTask description format: Title | Priority | Estimate | Assignee | Due | Acceptance criteria\n\nAlways surface blockers and dependencies. When reviewing real tasks, flag overdue items and unbalanced workloads. Be structured and direct.",
     defaultProvider: "gemini",
   },
   {
@@ -326,13 +327,16 @@ function buildTeamContext(
   const today = new Date().toISOString().split("T")[0];
   const in7 = new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0];
   const memberLine = members.map((m) => `${m.name} (${m.role}${m.status !== "Available" ? ", " + m.status : ""})`).join(" | ");
+  // Include IDs so Claude can reference them when creating/assigning tasks
+  const memberWithIds = members.map((m) => `${m.name} [id:${m.id}]`).join(" | ");
+  const projectWithIds = projects.map((p) => `${p.name} [id:${p.id}] (${p.status})`).join(" | ");
 
   if (agentId === "hub") {
     const open = tasks.filter((t) => t.status !== "completed");
     const overdue = open.filter((t) => t.dueDate && t.dueDate < today).length;
     const weekEvents = events.filter((e) => e.date >= today && e.date <= in7).length;
     const active = projects.filter((p) => p.status === "active").length;
-    return `TEAM SNAPSHOT: ${members.length} members | ${open.length} open tasks (${overdue} overdue) | ${weekEvents} events this week | ${active} active projects`;
+    return `TEAM SNAPSHOT: ${members.length} members | ${open.length} open tasks (${overdue} overdue) | ${weekEvents} events this week | ${active} active projects\nMEMBERS (with IDs for task assignment): ${memberWithIds}\nPROJECTS (with IDs): ${projectWithIds}`;
   }
 
   if (agentId === "tasks") {
@@ -347,8 +351,7 @@ function buildTeamContext(
       const who = t.assigneeIds.map((id) => mMap[id] ?? "?").join(", ") || "unassigned";
       return `[${t.priority[0]}] ${t.title} | ${who} | due:${t.dueDate || "none"} | ${t.status}`;
     }).join("\n");
-    const projLine = projects.map((p) => `${p.name} (${p.status}, ${p.progress}%)`).join(" | ");
-    return `MEMBERS: ${memberLine}\nPROJECTS: ${projLine}\nOPEN TASKS (${open.length} shown, ${overdue} overdue):\n${taskLines}`;
+    return `MEMBERS (with IDs for assignment): ${memberWithIds}\nPROJECTS (with IDs): ${projectWithIds}\nOPEN TASKS (${open.length} shown, ${overdue} overdue):\n${taskLines}`;
   }
 
   if (agentId === "analytics") {
@@ -396,6 +399,239 @@ function buildTeamContext(
   return "";
 }
 
+interface SkillProfile {
+  id: string;
+  label: string;
+  emoji: string;
+  color: string;
+  tag: string;
+  injection: string;
+}
+
+const SKILL_PROFILES: SkillProfile[] = [
+  {
+    id: "marketing",
+    label: "Marketing",
+    emoji: "📣",
+    color: "#ec4899",
+    tag: "Growth & Campaigns",
+    injection: `The user is a marketing professional. Calibrate all responses to this expertise:
+- Frameworks to apply: AIDA (Awareness→Interest→Desire→Action), funnel stages (ToFu/MoFu/BoFu), RACE planning, Jobs-to-be-Done
+- Metrics to speak fluently: CAC, LTV, LTV:CAC ratio, ROAS, CTR, CPL, MQL→SQL conversion, churn rate, NPS
+- Campaign briefs should follow: Objective | Target Audience | Key Message | Channels | KPIs | Budget | Timeline
+- Always segment: who is the audience, what is the one CTA, what does success look like in 30/60/90 days
+- Channel-specific norms: email (<50 char subject, preheader text), paid (Quality Score, ad relevance), SEO (search intent first, then keywords), social (platform-native formats)
+- Use A/B testing mindset — always suggest a control vs variant when proposing copy or campaigns`,
+  },
+  {
+    id: "developer",
+    label: "Developer",
+    emoji: "💻",
+    color: "#6366f1",
+    tag: "Code & Architecture",
+    injection: `The user is a software developer. Calibrate all responses to this expertise:
+- Be technical by default — use precise terminology, don't explain basics (variables, loops, APIs)
+- Apply SOLID principles, DRY, separation of concerns, and appropriate design patterns (Factory, Observer, Strategy, etc.)
+- When discussing architecture: weigh tradeoffs (monolith vs microservices, REST vs GraphQL, sync vs async, SQL vs NoSQL)
+- Performance mindset: O(n) complexity, DB index strategies, caching layers (Redis, CDN), lazy loading
+- Security by default: mention auth (JWT/OAuth), input validation, SQL injection, XSS, rate limiting where relevant
+- Code suggestions should be production-quality — include error handling, types, edge cases
+- Version control: trunk-based dev, feature flags, semantic versioning, conventional commits`,
+  },
+  {
+    id: "pm",
+    label: "Project Manager",
+    emoji: "📋",
+    color: "#3b82f6",
+    tag: "Delivery & Planning",
+    injection: `The user is a project manager. Calibrate all responses to this expertise:
+- Every action item must have: owner + deadline + definition of done. No owner = not an action item, flag it.
+- Frameworks: RACI for accountability, RAID log (Risks, Assumptions, Issues, Dependencies), MoSCoW for scope
+- Agile: velocity, burndown, sprint goals, epic→story→task hierarchy, retrospective formats (Start/Stop/Continue)
+- Waterfall/hybrid: critical path, Gantt dependencies, milestone gates, change control process
+- Estimation: T-shirt sizing (XS <1h | S 1-4h | M 1-2d | L 3-5d | XL >1wk), Planning Poker, three-point estimates
+- Stakeholder comms: BLUF (Bottom Line Up Front), status RAG (Red/Amber/Green), executive summary first
+- Risk: Probability × Impact matrix, always pair a risk with a mitigation and a contingency`,
+  },
+  {
+    id: "data",
+    label: "Data Analyst",
+    emoji: "📊",
+    color: "#f97316",
+    tag: "Metrics & Insights",
+    injection: `The user is a data analyst. Calibrate all responses to this expertise:
+- Distinguish lead metrics (predictive: activity, pipeline) from lag metrics (outcome: revenue, churn)
+- Insight format: "[X] is happening → likely because [Y] → recommend [Z] → measure success by [metric]"
+- Statistical hygiene: correlation ≠ causation, always ask about sample size, confidence intervals, p-values, and confounds
+- Flag >20% period-over-period deviation as a trend worth investigating
+- Visualization: bar for comparison, line for trends, scatter for correlation, heatmap for distribution — suggest the right chart type
+- OKR framing: Objective (directional) + Key Results (specific, measurable, time-bound, 3-5 per O)
+- SQL/data mindset: group-by, joins, window functions, cohort analysis, funnel queries are assumed vocabulary`,
+  },
+  {
+    id: "designer",
+    label: "UX Designer",
+    emoji: "🎨",
+    color: "#8b5cf6",
+    tag: "User Experience",
+    injection: `The user is a UX/UI designer. Calibrate all responses to this expertise:
+- Design thinking phases: Empathize → Define → Ideate → Prototype → Test — anchor advice in the right phase
+- User research methods: jobs-to-be-done, user interviews, usability tests, card sorting, journey mapping, affinity diagrams
+- Nielsen's 10 heuristics: visibility of system status, match with real world, user control, consistency, error prevention, recognition over recall, flexibility, aesthetic minimalism, help users recover from errors, documentation
+- Accessibility: WCAG 2.1 AA minimum — color contrast 4.5:1, focus states, alt text, keyboard nav, ARIA labels
+- Component mindset: atoms → molecules → organisms (Atomic Design), design tokens, spacing scale (4px base)
+- Metrics: task completion rate, time-on-task, SUS score, error rate, learnability curve
+- Avoid: dark patterns, infinite scroll for critical tasks, modal overuse, unlabeled icons`,
+  },
+  {
+    id: "hr",
+    label: "HR & People Ops",
+    emoji: "👥",
+    color: "#10b981",
+    tag: "Culture & Hiring",
+    injection: `The user works in HR and People Operations. Calibrate all responses to this expertise:
+- Employee lifecycle lens: Attract → Hire → Onboard → Develop → Retain → Separate
+- Hiring: structured interviews beat unstructured (reduce bias), STAR method (Situation, Task, Action, Result) for behavioral questions, scorecards per competency, diverse panels
+- Performance: OKRs for goal alignment, continuous feedback over annual reviews, 9-box grid for talent mapping, PIP structure (issue, expectation, support, timeline)
+- Engagement: Gallup Q12 drivers, eNPS as a pulse metric, stay interviews > exit interviews
+- Compensation: total rewards framing (base + equity + benefits + growth), internal equity vs market benchmarking, pay bands
+- Legal awareness: flag anything touching protected characteristics, wrongful termination, accommodation requests — always suggest legal review
+- Culture: psychological safety (Edmondson), inclusion ≠ diversity, belonging indicators`,
+  },
+  {
+    id: "sales",
+    label: "Sales & BizDev",
+    emoji: "🤝",
+    color: "#f59e0b",
+    tag: "Pipeline & Deals",
+    injection: `The user works in sales or business development. Calibrate all responses to this expertise:
+- MEDDIC qualification: Metrics (quantify the pain), Economic Buyer (who signs), Decision Criteria, Decision Process, Identify Pain, Champion (internal advocate)
+- SPIN selling: Situation → Problem → Implication → Need-Payoff questions before pitching
+- Pipeline hygiene: stage-by-stage conversion rates, deal velocity (days per stage), weighted pipeline vs commit
+- Discovery call structure: 2 min rapport → 5 min situation questions → 10 min pain/implication → 5 min vision of solved → close for next step
+- Objection handling: acknowledge → clarify → reframe → evidence → close (never argue)
+- Outbound: personalization > volume, trigger-based outreach (funding, headcount, job posts), multi-touch sequences (email + LinkedIn + call)
+- Proposal/pricing: anchor high, present 3 tiers (Good/Better/Best), ROI calculation, clear next step and expiry`,
+  },
+  {
+    id: "finance",
+    label: "Finance",
+    emoji: "💰",
+    color: "#14b8a6",
+    tag: "Budgets & Forecasts",
+    injection: `The user has a finance or operations background. Calibrate all responses to this expertise:
+- Three statements: P&L (revenue − COGS = gross profit − OpEx = EBITDA), Cash Flow (operating/investing/financing), Balance Sheet (assets = liabilities + equity)
+- SaaS metrics: ARR, MRR, net revenue retention (NRR), gross revenue retention (GRR), churn rate, quick ratio (new MRR + expansion) / (churned + contraction)
+- Unit economics: CAC payback period, LTV:CAC ratio (healthy = 3:1+), contribution margin per unit
+- Cash management: runway = cash / monthly burn, burn multiple = net burn / net new ARR (healthy <1.5)
+- Investment decisions: NPV, IRR, payback period — always present a base/upside/downside scenario
+- Budget process: zero-based vs incremental, variance analysis (budget vs actual), rolling 13-week cash forecast
+- Headcount: fully-loaded cost (salary + benefits + overhead ~1.25–1.4×), productivity metrics per FTE`,
+  },
+  {
+    id: "content",
+    label: "Content Strategist",
+    emoji: "✍️",
+    color: "#06b6d4",
+    tag: "Copy & Strategy",
+    injection: `The user is a content strategist and copywriter. Calibrate all responses to this expertise:
+- Content strategy pillars: authority (thought leadership), community (engagement), conversion (demand gen), care (support/retention)
+- SEO mindset: search intent first (informational/navigational/commercial/transactional), keyword clustering, topic authority, internal linking, E-E-A-T signals
+- Copy principles: F-pattern for web (most important info top-left), inverted pyramid (conclusion first), one idea per sentence, active voice, cut adverbs
+- Format rules: email subject <50 chars (benefit-first, no clickbait), headlines 6-8 words, CTAs = verb + value ("Get your free audit" not "Click here")
+- Editorial calendar: pillar content → cluster posts → distribution → repurpose (1 long-form → 5 social posts → 1 email → 1 short video script)
+- Voice and tone: confirm brand voice before drafting; tone ladder — Formal → Professional → Friendly → Casual
+- Metrics: organic traffic, time-on-page, scroll depth, conversion rate by content type, content-influenced pipeline`,
+  },
+  {
+    id: "cs",
+    label: "Customer Success",
+    emoji: "⭐",
+    color: "#84cc16",
+    tag: "Retention & Support",
+    injection: `The user works in Customer Success. Calibrate all responses to this expertise:
+- Customer health scoring: login frequency, feature adoption depth, support ticket volume/sentiment, QBR attendance, expansion history — flag accounts scoring red/amber
+- Churn signals: no login >14 days, champion left the company, open critical tickets >7 days, missed QBR, billing disputes
+- QBR structure (60 min): Wins since last QBR → Usage & ROI review → Roadmap preview → Blockers & risks → Next 90-day goals → Expansion discussion
+- Metrics to own: GRR (gross revenue retention), NRR (net revenue retention), NPS/CSAT/CES, time-to-value (TTV), onboarding completion rate
+- Onboarding: define success milestone with customer day 1, time-box onboarding (30/60/90 day plan), celebrate first value moment
+- Expansion playbook: only upsell after customer achieves core value; cross-sell when adjacent pain is confirmed; use usage data as the trigger
+- EBR (Executive Business Review) framing: tie product usage to customer's business outcomes, not feature lists`,
+  },
+];
+
+interface SavedPrompt {
+  id: string;
+  text: string;
+  savedAt: string;
+}
+
+interface PromptTemplate {
+  category: string;
+  label: string;
+  template: string;
+  color: string;
+}
+
+const PROMPT_TEMPLATES: PromptTemplate[] = [
+  { category: "Planning", label: "Sprint update", color: "#3b82f6",
+    template: "Write a sprint update for week ending [DATE]. Completed: [TASKS DONE]. Blocked by: [BLOCKERS]. Next week goals: [GOALS]." },
+  { category: "Planning", label: "Break down project", color: "#3b82f6",
+    template: "Break [PROJECT NAME] into actionable tasks. Timeline: [TIMELINE]. Team size: [N] people. Key constraints: [CONSTRAINTS]." },
+  { category: "Hiring", label: "Job description", color: "#10b981",
+    template: "Write a job description for [ROLE] on the [TEAM] team. Must-have requirements: [REQUIREMENTS]. Nice-to-have: [NICE TO HAVE]. Salary range: [RANGE]." },
+  { category: "Hiring", label: "Interview questions", color: "#10b981",
+    template: "Write 5 behavioral interview questions for a [ROLE] role focused on [SKILL OR COMPETENCY]. Include what a strong answer looks like for each." },
+  { category: "Hiring", label: "Performance review", color: "#10b981",
+    template: "Write a performance review summary for [NAME] covering [TIME PERIOD]. Strengths: [STRENGTHS]. Areas to grow: [AREAS]. Overall rating: [RATING]." },
+  { category: "Comms", label: "Project announcement", color: "#ec4899",
+    template: "Write a project kickoff announcement for [PROJECT NAME]. Start date: [DATE]. Team: [MEMBERS]. Goal: [GOAL]. First milestone: [MILESTONE]." },
+  { category: "Comms", label: "Email draft", color: "#ec4899",
+    template: "Draft a [professional/friendly/urgent] email to [RECIPIENT] about [TOPIC]. Key points to cover: [POINTS]. Desired outcome: [OUTCOME]." },
+  { category: "Comms", label: "Team retro", color: "#ec4899",
+    template: "Run a retrospective for [TEAM] on [PROJECT/SPRINT]. What went well: [WINS]. What didn't: [ISSUES]. Suggested actions: [ACTIONS]." },
+  { category: "Analysis", label: "Meeting summary", color: "#f97316",
+    template: "Summarize these meeting notes, extract all action items with owners and deadlines, and list any open questions:\n\n[PASTE MEETING NOTES HERE]" },
+  { category: "Analysis", label: "Data insights", color: "#f97316",
+    template: "Analyze this data and give me the top 3 insights with a recommended action for each:\n\n[PASTE DATA HERE]" },
+  { category: "Analysis", label: "Competitive analysis", color: "#f97316",
+    template: "Compare [OUR PRODUCT] against [COMPETITOR]. Focus on: pricing, features, target audience, and positioning. Recommend where we should differentiate." },
+  { category: "Strategy", label: "OKR draft", color: "#8b5cf6",
+    template: "Draft OKRs for [TEAM/COMPANY] for [QUARTER]. Focus area: [FOCUS]. Current baseline metrics: [METRICS]. Desired outcome in one sentence: [OUTCOME]." },
+  { category: "Strategy", label: "Proposal", color: "#8b5cf6",
+    template: "Write a proposal for [INITIATIVE]. Problem it solves: [PROBLEM]. Estimated effort: [EFFORT]. Expected impact: [IMPACT]. Risks: [RISKS]. Ask: [WHAT YOU NEED]." },
+];
+
+function compressImage(file: File): Promise<PendingImage> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = (ev) => {
+      const img = new window.Image();
+      img.onerror = reject;
+      img.onload = () => {
+        const MAX_PX = 1500;
+        let { width, height } = img;
+        if (width > MAX_PX) {
+          height = Math.round((height * MAX_PX) / width);
+          width = MAX_PX;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+        const mimeType = file.type === "image/png" ? "image/png" : "image/jpeg";
+        const dataUrl = canvas.toDataURL(mimeType, 0.82);
+        const [prefix, data] = dataUrl.split(",");
+        const mt = prefix.split(":")[1].split(";")[0];
+        resolve({ data, mimeType: mt, previewUrl: dataUrl });
+      };
+      img.src = ev.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function AIPage() {
   const {
     currentUser, currentTeamId, accessToken,
@@ -416,11 +652,34 @@ export default function AIPage() {
   const [kbUploading, setKbUploading] = useState(false);
   const [kbError, setKbError] = useState<string | null>(null);
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
+  const [activeSkillIds, setActiveSkillIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem("ai_active_skills");
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
+
+  const toggleSkill = (id: string) => {
+    setActiveSkillIds((prev) => {
+      const next = prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id];
+      try { localStorage.setItem("ai_active_skills", JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  };
+  const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>(() => {
+    try { return JSON.parse(localStorage.getItem("ai_saved_prompts") || "[]"); } catch { return []; }
+  });
+  const [isListening, setIsListening] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [savedPromptsOpen, setSavedPromptsOpen] = useState(false);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const kbFileInputRef = useRef<HTMLInputElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
 
   const activeAgent = AGENTS.find((a) => a.id === activeAgentId) ?? AGENTS[0];
   const AgentIcon = activeAgent.icon;
@@ -562,28 +821,52 @@ export default function AIPage() {
     );
 
     try {
+      const headers: Record<string, string> = { "content-type": "application/json" };
+      if (accessToken) headers["authorization"] = `Bearer ${accessToken}`;
+
       const res = await fetch("/api/ai", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers,
         body: JSON.stringify({
           messages: apiMessages,
-          systemPrompt: activeAgent.systemPrompt,
+          systemPrompt: activeSkillIds.length > 0
+            ? activeAgent.systemPrompt + "\n\n---\nUser context:\n" +
+              SKILL_PROFILES.filter((s) => activeSkillIds.includes(s.id)).map((s) => s.injection).join(" ")
+            : activeAgent.systemPrompt,
           fileContext,
           teamContext,
           teamId: currentTeamId,
           provider,
         }),
       });
-      const data = await res.json();
+      let data: { text?: string; error?: string; toolData?: unknown; usedProvider?: string };
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(
+          res.status === 413
+            ? "Image is too large to send. Try a smaller image (under 5 MB)."
+            : `Server error (${res.status}). Please try again.`
+        );
+      }
       if (!res.ok) throw new Error(data.error ?? "Something went wrong.");
       const reply = data.text as string;
       // If the server switched to Claude for image analysis, update the badge
       if (data.usedProvider && data.usedProvider !== provider) {
         setProviderPerAgent((prev) => ({ ...prev, [activeAgentId]: data.usedProvider }));
       }
+      // Append AI reply; append system cards for created tasks/events
+      const assistantMessages: Message[] = [{ role: "assistant", content: reply }];
+      const toolData = data.toolData as Record<string, unknown> | undefined;
+      if (toolData?.createdTask) {
+        assistantMessages.push({ role: "assistant", content: `__task_created__:${JSON.stringify(toolData.createdTask)}` });
+      }
+      if (toolData?.createdEvent) {
+        assistantMessages.push({ role: "assistant", content: `__event_created__:${JSON.stringify(toolData.createdEvent)}` });
+      }
       setConversations((prev) => ({
         ...prev,
-        [activeAgentId]: [...newMessages, { role: "assistant", content: reply }],
+        [activeAgentId]: [...newMessages, ...assistantMessages],
       }));
       if (sessionId) persistMessage(sessionId, "assistant", reply);
       loadSessionsList(activeAgentId);
@@ -661,20 +944,18 @@ export default function AIPage() {
     }
   };
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     e.target.value = "";
-    files.forEach((file) => {
-      if (file.size > 5 * 1024 * 1024) { setError(`${file.name} must be under 5 MB.`); return; }
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const dataUrl = ev.target?.result as string;
-        const [prefix, data] = dataUrl.split(",");
-        const mimeType = prefix.split(":")[1].split(";")[0];
-        setPendingImages((prev) => [...prev, { data, mimeType, previewUrl: dataUrl }]);
-      };
-      reader.readAsDataURL(file);
-    });
+    for (const file of files) {
+      if (file.size > 20 * 1024 * 1024) { setError(`${file.name} must be under 20 MB.`); continue; }
+      try {
+        const compressed = await compressImage(file);
+        setPendingImages((prev) => [...prev, compressed]);
+      } catch {
+        setError(`Could not process ${file.name}.`);
+      }
+    }
   };
 
   const handleKbUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -701,6 +982,84 @@ export default function AIPage() {
     } catch {
       // Non-fatal
     }
+  };
+
+  // ── Voice input ──────────────────────────────────────────────────────────
+  const toggleVoice = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) { setError("Voice input isn't supported in this browser. Try Chrome."); return; }
+    const r = new SR();
+    r.continuous = true;
+    r.interimResults = true;
+    r.lang = "en-US";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    r.onresult = (e: any) => {
+      let transcript = "";
+      for (let i = 0; i < e.results.length; i++) transcript += e.results[i][0].transcript;
+      setInput(transcript);
+      const el = inputRef.current;
+      if (el) { el.style.height = "auto"; el.style.height = `${el.scrollHeight}px`; }
+    };
+    r.onerror = () => setIsListening(false);
+    r.onend = () => setIsListening(false);
+    r.start();
+    recognitionRef.current = r;
+    setIsListening(true);
+  };
+
+  // ── Saved prompts ─────────────────────────────────────────────────────────
+  const saveCurrentPrompt = () => {
+    const text = input.trim();
+    if (!text) return;
+    setSavedPrompts((prev) => {
+      const next = [{ id: Date.now().toString(), text, savedAt: new Date().toISOString() }, ...prev].slice(0, 20);
+      try { localStorage.setItem("ai_saved_prompts", JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  };
+
+  const deleteSavedPrompt = (id: string) => {
+    setSavedPrompts((prev) => {
+      const next = prev.filter((p) => p.id !== id);
+      try { localStorage.setItem("ai_saved_prompts", JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  };
+
+  // ── Export chat ───────────────────────────────────────────────────────────
+  const exportChat = () => {
+    const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+    const rows = messages
+      .filter((m) => !m.content.startsWith("__task_created__") && !m.content.startsWith("__event_created__"))
+      .map((m) => {
+        const who = m.role === "user" ? "You" : activeAgent.label;
+        const body = m.content.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
+        return `<div class="msg ${m.role}"><div class="who">${who}</div><div class="body">${body}</div></div>`;
+      }).join("");
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${activeAgent.label} — ${date}</title>
+<style>
+  body{font-family:-apple-system,sans-serif;max-width:720px;margin:48px auto;padding:24px;color:#111827}
+  h1{font-size:1.1rem;font-weight:700;border-bottom:2px solid #e5e7eb;padding-bottom:12px;margin-bottom:24px}
+  .msg{margin:16px 0}
+  .who{font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;margin-bottom:4px}
+  .user .who{color:#f59e0b}
+  .body{background:#f9fafb;border-radius:10px;padding:12px 16px;font-size:0.9rem;line-height:1.65;white-space:pre-wrap}
+  .user .body{background:#111827;color:white}
+  @media print{body{margin:16px}}
+</style></head><body>
+<h1>${activeAgent.label} &nbsp;·&nbsp; ${date}</h1>${rows}</body></html>`;
+
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, "_blank");
+    if (win) setTimeout(() => { win.print(); URL.revokeObjectURL(url); }, 400);
   };
 
   function formatBytes(bytes: number) {
@@ -760,6 +1119,130 @@ export default function AIPage() {
                 {activeAgentId === agent.id && <SessionHistory agentId={agent.id} sessionsList={sessionsList} sessionIds={sessionIds} openSession={openSession} clearChat={clearChat} deleteSession={deleteSession} />}
               </div>
             ))}
+          </div>
+
+          {/* Skills */}
+          <div>
+            <p className="px-2 mb-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: "#9ca3af" }}>
+              Your Skills
+              {activeSkillIds.length > 0 && (
+                <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-white" style={{ background: "#6366f1", fontSize: "0.6rem" }}>
+                  {activeSkillIds.length}
+                </span>
+              )}
+            </p>
+            <p className="px-2 mb-2" style={{ color: "#9ca3af", fontSize: "0.65rem", lineHeight: 1.4 }}>
+              Toggle your role — added to every prompt automatically.
+            </p>
+            <div className="flex flex-col gap-0.5">
+              {SKILL_PROFILES.map((skill) => {
+                const active = activeSkillIds.includes(skill.id);
+                return (
+                  <button key={skill.id} onClick={() => toggleSkill(skill.id)}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left transition-all"
+                    style={{
+                      background: active ? `${skill.color}15` : "transparent",
+                      border: active ? `1px solid ${skill.color}40` : "1px solid transparent",
+                    }}>
+                    <span style={{ fontSize: "0.85rem", lineHeight: 1 }}>{skill.emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium truncate" style={{ color: active ? skill.color : "#374151" }}>
+                        {skill.label}
+                      </p>
+                      <p style={{ color: "#9ca3af", fontSize: "0.6rem" }}>{skill.tag}</p>
+                    </div>
+                    {active && (
+                      <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: skill.color }} />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            {activeSkillIds.length > 0 && (
+              <button onClick={() => {
+                setActiveSkillIds([]);
+                try { localStorage.removeItem("ai_active_skills"); } catch { /* ignore */ }
+              }}
+                className="mt-1.5 w-full text-center py-1 rounded-lg transition-colors hover:bg-gray-50"
+                style={{ color: "#9ca3af", fontSize: "0.65rem" }}>
+                Clear all skills
+              </button>
+            )}
+          </div>
+
+          {/* Saved Prompts */}
+          <div>
+            <button onClick={() => setSavedPromptsOpen((v) => !v)}
+              className="w-full flex items-center justify-between px-2 mb-1.5">
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#9ca3af" }}>
+                Saved Prompts
+                {savedPrompts.length > 0 && (
+                  <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-white" style={{ background: "#f59e0b", fontSize: "0.6rem" }}>
+                    {savedPrompts.length}
+                  </span>
+                )}
+              </p>
+              {savedPromptsOpen
+                ? <ChevronDown className="w-3 h-3" style={{ color: "#9ca3af" }} />
+                : <ChevronRight className="w-3 h-3" style={{ color: "#9ca3af" }} />}
+            </button>
+            {savedPromptsOpen && (
+              <div className="flex flex-col gap-1">
+                {savedPrompts.length === 0 && (
+                  <p className="px-2 py-1.5 text-xs" style={{ color: "#9ca3af" }}>
+                    Type a prompt and click <Bookmark className="w-3 h-3 inline mx-0.5" /> to save it.
+                  </p>
+                )}
+                {savedPrompts.map((p) => (
+                  <div key={p.id} className="flex items-start gap-1 px-2 py-1.5 rounded-lg group hover:bg-gray-50">
+                    <button className="flex-1 text-left min-w-0" onClick={() => { setInput(p.text); inputRef.current?.focus(); }}>
+                      <p className="text-xs truncate" style={{ color: "#374151" }} title={p.text}>{p.text}</p>
+                    </button>
+                    <button onClick={() => deleteSavedPrompt(p.id)}
+                      className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                      style={{ color: "#d1d5db" }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#ef4444"; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "#d1d5db"; }}>
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Prompt Templates */}
+          <div>
+            <button onClick={() => setTemplatesOpen((v) => !v)}
+              className="w-full flex items-center justify-between px-2 mb-1.5">
+              <p className="text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5" style={{ color: "#9ca3af" }}>
+                <Zap className="w-3 h-3" />
+                Templates
+              </p>
+              {templatesOpen
+                ? <ChevronDown className="w-3 h-3" style={{ color: "#9ca3af" }} />
+                : <ChevronRight className="w-3 h-3" style={{ color: "#9ca3af" }} />}
+            </button>
+            {templatesOpen && (
+              <div className="flex flex-col gap-0.5">
+                {Array.from(new Set(PROMPT_TEMPLATES.map((t) => t.category))).map((cat) => (
+                  <div key={cat} className="mb-1">
+                    <p className="px-2 mb-0.5 text-xs font-medium" style={{ color: "#9ca3af" }}>{cat}</p>
+                    {PROMPT_TEMPLATES.filter((t) => t.category === cat).map((t) => (
+                      <button key={t.label}
+                        onClick={() => { setInput(t.template); setTemplatesOpen(false); setTimeout(() => inputRef.current?.focus(), 50); }}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left hover:bg-gray-50 transition-colors">
+                        <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: t.color }} />
+                        <span className="text-xs" style={{ color: "#374151" }}>{t.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                ))}
+                <p className="px-2 mt-0.5" style={{ color: "#9ca3af", fontSize: "0.6rem" }}>
+                  Click to fill input · edit [PLACEHOLDERS] before sending
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Knowledge Base — persistent, team-wide */}
@@ -879,6 +1362,26 @@ export default function AIPage() {
               title="Switch AI provider">
               <span>{provider === "claude" ? "✦ Claude" : "◆ Gemini"}</span>
             </button>
+            {!isEmpty && currentTeamId && (
+              <button
+                onClick={() => send("Please summarize what we've discussed into a clear, actionable task title and description, then add it to the team's task list using your task creation tool.")}
+                disabled={loading}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors hover:bg-blue-50"
+                style={{ color: "#3b82f6", borderColor: "#bfdbfe", background: "#eff6ff" }}
+                title="Summarize this conversation and create a task">
+                <CheckSquare className="w-3.5 h-3.5" />
+                <span>Add as task</span>
+              </button>
+            )}
+            {!isEmpty && (
+              <button onClick={exportChat}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors hover:bg-gray-50"
+                style={{ color: "#6b7280", borderColor: "#e5e7eb" }}
+                title="Export chat as PDF">
+                <Download className="w-3.5 h-3.5" />
+                <span>Export</span>
+              </button>
+            )}
             {!isEmpty && (
               <button onClick={clearChat}
                 className="text-xs px-3 py-1.5 rounded-lg border transition-colors hover:bg-gray-50"
@@ -923,6 +1426,47 @@ export default function AIPage() {
             <div className="max-w-2xl mx-auto flex flex-col gap-5">
               {messages.map((msg, i) => {
                 const isUser = msg.role === "user";
+
+                // Task-created system card
+                if (!isUser && msg.content.startsWith("__task_created__:")) {
+                  let task: { title: string; priority: string; status: string; dueDate?: string } | null = null;
+                  try { task = JSON.parse(msg.content.slice("__task_created__:".length)); } catch { /* ignore */ }
+                  return (
+                    <div key={i} className="flex justify-center">
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs"
+                        style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", color: "#15803d" }}>
+                        <CheckSquare className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span>
+                          Task created: <strong>{task?.title ?? "New task"}</strong>
+                          {task?.priority && ` · ${task.priority}`}
+                          {task?.dueDate && ` · due ${task.dueDate}`}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Event-created system card
+                if (!isUser && msg.content.startsWith("__event_created__:")) {
+                  let ev: { title: string; date: string; startTime: string; type?: string } | null = null;
+                  try { ev = JSON.parse(msg.content.slice("__event_created__:".length)); } catch { /* ignore */ }
+                  const time = ev?.startTime ? new Date(ev.startTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+                  return (
+                    <div key={i} className="flex justify-center">
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs"
+                        style={{ background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1d4ed8" }}>
+                        <CalendarIcon className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span>
+                          Event added: <strong>{ev?.title ?? "New event"}</strong>
+                          {ev?.date && ` · ${ev.date}`}
+                          {time && ` at ${time}`}
+                          {ev?.type && ` · ${ev.type}`}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
                   <div key={i} className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
                     <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold"
@@ -1042,6 +1586,18 @@ export default function AIPage() {
                   style={{ color: pendingImages.length > 0 ? "#3b82f6" : "#9ca3af" }}>
                   <ImageIcon className="w-4 h-4" />
                 </button>
+                <button onClick={toggleVoice} title={isListening ? "Stop recording" : "Voice input"}
+                  className="flex-shrink-0 mb-0.5 p-1.5 rounded-lg hover:bg-gray-200 transition-colors"
+                  style={{ color: isListening ? "#ef4444" : "#9ca3af", background: isListening ? "#fef2f2" : "transparent" }}>
+                  {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                </button>
+                {input.trim() && (
+                  <button onClick={saveCurrentPrompt} title="Save this prompt"
+                    className="flex-shrink-0 mb-0.5 p-1.5 rounded-lg hover:bg-gray-200 transition-colors"
+                    style={{ color: "#9ca3af" }}>
+                    <Bookmark className="w-4 h-4" />
+                  </button>
+                )}
                 <textarea ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={pendingImages.length > 0 ? "Add a caption or just send…" : `Ask ${activeAgent.label}…`}
