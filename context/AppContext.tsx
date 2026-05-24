@@ -546,7 +546,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
 
     realtimeChannelRef.current = channel;
-  }, [loadTeamData, addToast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadTeamData]);
 
   // ── Load teams ─────────────────────────────────────────────────────────────
   const loadUserTeams = useCallback(async (token: string, userId: string) => {
