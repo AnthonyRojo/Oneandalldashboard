@@ -220,10 +220,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const { messages, systemPrompt, fileContext, teamContext, teamId, provider = "claude" } = body;
-  if (!messages || !Array.isArray(messages) || messages.length === 0) {
+  const { messages: rawMessages, systemPrompt, fileContext, teamContext, teamId, provider = "claude" } = body;
+  if (!rawMessages || !Array.isArray(rawMessages) || rawMessages.length === 0) {
     return NextResponse.json({ error: "Messages are required." }, { status: 400 });
   }
+  // Hard cap: never send more than 12 messages to the model regardless of client payload
+  const messages = rawMessages.slice(-12);
 
   const claudeKey = process.env.ANTHROPIC_API_KEY;
   const geminiKey = process.env.GEMINI_API_KEY;

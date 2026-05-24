@@ -815,9 +815,11 @@ export default function AIPage() {
       activeAgentId, currentMembers, currentTasks, currentProjects, currentEvents, currentAnnouncements,
     ) || undefined;
 
-    // Strip image data from history messages — only the current message carries the image
-    const apiMessages = newMessages.map((m, i) =>
-      i === newMessages.length - 1 ? m : { role: m.role, content: m.content }
+    // Keep only the last 12 messages (6 exchanges) to stay under token rate limits.
+    // Images are stripped from all but the current message — base64 is huge.
+    const windowedMessages = newMessages.slice(-12);
+    const apiMessages = windowedMessages.map((m, i) =>
+      i === windowedMessages.length - 1 ? m : { role: m.role, content: m.content }
     );
 
     // Guard: check total image payload size before sending (base64 chars ≈ bytes in JSON)
