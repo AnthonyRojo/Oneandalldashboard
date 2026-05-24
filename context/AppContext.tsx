@@ -530,9 +530,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setOnlineMembers(new Set(Object.values(state).flat().map((p) => p.user_id)));
       })
       .on("presence", { event: "join" }, ({ newPresences }) => {
-        newPresences.forEach((p: { user_id: string }) => {
-          const name = actorName(p.user_id);
-          if (name && p.user_id !== currentUserIdRef.current) addToast(`${name} is online`, "info");
+        newPresences.forEach((p) => {
+          const uid = (p as Record<string, unknown>).user_id as string | undefined;
+          if (!uid || uid === currentUserIdRef.current) return;
+          const name = actorName(uid);
+          if (name) addToast(`${name} is online`, "info");
         });
       })
 
