@@ -260,6 +260,9 @@ interface AppContextType {
   toasts: Toast[];
   addToast: (message: string, type?: Toast["type"]) => void;
   removeToast: (id: string) => void;
+
+  // Presence
+  onlineMembers: Set<string>;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -293,6 +296,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [onlineMembers, setOnlineMembers] = useState<Set<string>>(new Set());
 
   // Refs to avoid stale closures
   const currentTeamRef = useRef<string>("");
@@ -300,6 +304,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const currentUserIdRef = useRef<string | null>(null);
   const realtimeChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const membersRef = useRef<TeamMember[]>([]);
+
+  // Keep membersRef synced so realtime handlers always see fresh member list
+  useEffect(() => { membersRef.current = members; }, [members]);
 
   const currentTeam = teams.find((t) => t.id === currentTeamId);
   const currentMembers = members.filter((m) => m.teamId === currentTeamId);
@@ -390,78 +398,153 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     if (!teamId) return;
 
-    // Subscribe to database changes for all team-related tables
     const channel = supabase.channel(`team-realtime:${teamId}`);
 
-    // Debounced refresh to avoid too many API calls
+    // Fallback debounced refresh for complex joined types (announcements, messages, activities)
     const scheduleRefresh = () => {
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
       refreshTimerRef.current = setTimeout(() => {
         if (tokenRef.current && currentTeamRef.current && currentUserIdRef.current) {
           loadTeamData(currentTeamRef.current, tokenRef.current, currentUserIdRef.current);
         }
-      }, 100); // Faster refresh for snappier UI
+      }, 150);
     };
 
+    // Look up the display name of whoever made a change
+    const actorName = (userId: string | null | undefined): string | null => {
+      if (!userId) return null;
+      const m = membersRef.current.find((m) => m.userId === userId || m.id === userId);
+      return m?.name ?? null;
+    };
+
+    // Only toast for changes made by OTHER users
+    const toastOther = (userId: string | null | undefined, msg: string) => {
+      if (!userId || userId === currentUserIdRef.current) return;
+      const name = actorName(userId);
+      if (name) addToast(`${name} ${msg}`, "info");
+    };
+
+    // Row mappers — convert snake_case DB columns to camelCase app types
+    const mapTask = (r: Record<string, unknown>): Task => ({
+      id: r.id as string,
+      teamId: r.team_id as string,
+      projectId: (r.project_id as string) || "",
+      title: r.title as string,
+      description: (r.description as string) || "",
+      assigneeId: (r.assignee_id as string) || undefined,
+      assigneeIds: (r.assignee_ids as string[]) || (r.assignee_id ? [r.assignee_id as string] : []),
+      priority: (((r.priority as string) || "medium").charAt(0).toUpperCase() + ((r.priority as string) || "medium").slice(1)) as TaskPriority,
+      status: ((r.status as string) || "todo") as TaskStatus,
+      dueDate: (r.due_date as string) || "",
+      tags: (r.tags as string[]) || [],
+      submittedLink: (r.submitted_link as string) || undefined,
+      submissionStatus: (r.submission_status as "pending" | "approved" | "rejected") || undefined,
+      approverId: (r.approver_id as string) || undefined,
+      comments: [],
+      createdAt: (r.created_at as string) || undefined,
+    });
+
+    const mapProject = (r: Record<string, unknown>): Project => ({
+      id: r.id as string,
+      teamId: r.team_id as string,
+      name: r.name as string,
+      status: ((r.status as string) || "active") as "active" | "completed",
+      progress: (r.progress as number) || 0,
+      color: (r.color as string) || "#3b82f6",
+      dueDate: (r.due_date as string) || "",
+      description: (r.description as string) || "",
+    });
+
+    const mapEvent = (r: Record<string, unknown>): CalendarEvent => ({
+      id: r.id as string,
+      teamId: r.team_id as string,
+      title: r.title as string,
+      description: (r.description as string) || "",
+      date: (r.start_time as string)?.split("T")[0] || "",
+      startTime: (r.start_time as string) || "",
+      endTime: (r.end_time as string) || "",
+      type: ((r.type as string) || "Other") as EventType,
+      link: (r.link as string) || undefined,
+      color: (r.color as string) || undefined,
+    });
+
     channel
-      // Projects changes
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "projects", filter: `team_id=eq.${teamId}` },
-        () => scheduleRefresh()
-      )
-      // Tasks changes
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "tasks", filter: `team_id=eq.${teamId}` },
-        () => scheduleRefresh()
-      )
-      // Events changes
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "events", filter: `team_id=eq.${teamId}` },
-        () => scheduleRefresh()
-      )
-      // Announcements changes
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "announcements", filter: `team_id=eq.${teamId}` },
-        () => scheduleRefresh()
-      )
-      // Messages changes
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "messages", filter: `team_id=eq.${teamId}` },
-        () => scheduleRefresh()
-      )
-      // Activities changes
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "activities", filter: `team_id=eq.${teamId}` },
-        () => scheduleRefresh()
-      )
-      // Team members changes
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "team_members", filter: `team_id=eq.${teamId}` },
-        () => scheduleRefresh()
-      )
-      // Chat groups changes
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "chat_groups", filter: `team_id=eq.${teamId}` },
-        () => scheduleRefresh()
-      )
+      // ── Tasks (atomic) ──────────────────────────────────────────────────────
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "tasks", filter: `team_id=eq.${teamId}` }, (p) => {
+        const task = mapTask(p.new as Record<string, unknown>);
+        setTasks((prev) => [...prev.filter((t) => t.id !== task.id), task]);
+        toastOther((p.new as Record<string, unknown>).created_by as string, `created task "${task.title}"`);
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "tasks", filter: `team_id=eq.${teamId}` }, (p) => {
+        const task = mapTask(p.new as Record<string, unknown>);
+        setTasks((prev) => prev.map((t) => t.id === task.id ? { ...t, ...task, comments: t.comments } : t));
+        toastOther((p.new as Record<string, unknown>).created_by as string, `updated task "${task.title}"`);
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "tasks", filter: `team_id=eq.${teamId}` }, (p) => {
+        setTasks((prev) => prev.filter((t) => t.id !== (p.old as Record<string, unknown>).id as string));
+      })
+
+      // ── Projects (atomic) ───────────────────────────────────────────────────
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "projects", filter: `team_id=eq.${teamId}` }, (p) => {
+        const project = mapProject(p.new as Record<string, unknown>);
+        setProjects((prev) => [...prev.filter((x) => x.id !== project.id), project]);
+        toastOther((p.new as Record<string, unknown>).created_by as string, `created project "${project.name}"`);
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "projects", filter: `team_id=eq.${teamId}` }, (p) => {
+        const project = mapProject(p.new as Record<string, unknown>);
+        setProjects((prev) => prev.map((x) => x.id === project.id ? project : x));
+        toastOther((p.new as Record<string, unknown>).created_by as string, `updated project "${project.name}"`);
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "projects", filter: `team_id=eq.${teamId}` }, (p) => {
+        setProjects((prev) => prev.filter((x) => x.id !== (p.old as Record<string, unknown>).id as string));
+      })
+
+      // ── Events (atomic) ─────────────────────────────────────────────────────
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "events", filter: `team_id=eq.${teamId}` }, (p) => {
+        const ev = mapEvent(p.new as Record<string, unknown>);
+        setEvents((prev) => [...prev.filter((e) => e.id !== ev.id), ev]);
+        toastOther((p.new as Record<string, unknown>).created_by as string, `scheduled "${ev.title}"`);
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "events", filter: `team_id=eq.${teamId}` }, (p) => {
+        const ev = mapEvent(p.new as Record<string, unknown>);
+        setEvents((prev) => prev.map((e) => e.id === ev.id ? ev : e));
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "events", filter: `team_id=eq.${teamId}` }, (p) => {
+        setEvents((prev) => prev.filter((e) => e.id !== (p.old as Record<string, unknown>).id as string));
+      })
+
+      // ── Announcements/messages/activities/members — refresh (joined data) ───
+      .on("postgres_changes", { event: "*", schema: "public", table: "announcements", filter: `team_id=eq.${teamId}` }, (p) => {
+        scheduleRefresh();
+        if (p.eventType === "INSERT")
+          toastOther((p.new as Record<string, unknown>).author_id as string, "posted an announcement");
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages",     filter: `team_id=eq.${teamId}` }, () => scheduleRefresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "activities",   filter: `team_id=eq.${teamId}` }, () => scheduleRefresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "team_members", filter: `team_id=eq.${teamId}` }, () => scheduleRefresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "chat_groups",  filter: `team_id=eq.${teamId}` }, () => scheduleRefresh())
+
+      // ── Presence ─────────────────────────────────────────────────────────────
+      .on("presence", { event: "sync" }, () => {
+        const state = channel.presenceState<{ user_id: string }>();
+        setOnlineMembers(new Set(Object.values(state).flat().map((p) => p.user_id)));
+      })
+      .on("presence", { event: "join" }, ({ newPresences }) => {
+        newPresences.forEach((p: { user_id: string }) => {
+          const name = actorName(p.user_id);
+          if (name && p.user_id !== currentUserIdRef.current) addToast(`${name} is online`, "info");
+        });
+      })
+
       .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          console.log(`[v0] Realtime: subscribed to team ${teamId} database changes`);
-        } else if (status === "CHANNEL_ERROR") {
-          console.log(`[v0] Realtime: channel error for team ${teamId}`);
+        if (status === "SUBSCRIBED" && currentUserIdRef.current) {
+          channel.track({ user_id: currentUserIdRef.current, online_at: new Date().toISOString() });
+          console.log(`[Realtime] subscribed to team ${teamId}`);
         }
       });
 
     realtimeChannelRef.current = channel;
-  }, [loadTeamData]);
+  }, [loadTeamData, addToast]);
 
   // ── Load teams ─────────────────────────────────────────────────────────────
   const loadUserTeams = useCallback(async (token: string, userId: string) => {
@@ -1199,6 +1282,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         toasts,
         addToast,
         removeToast,
+        onlineMembers,
       }}
     >
       {children}

@@ -217,7 +217,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
     currentUser, logout, teams, currentTeamId, setCurrentTeamId, createTeam, currentTeam,
     currentActivities, currentMessages, sendMessage, editMessage,
     deleteMessage, loadMessages, chatGroups, createChatGroup, currentMembers,
-    toasts, removeToast,
+    toasts, removeToast, onlineMembers,
   } = useApp();
 
   const router = useRouter();
@@ -423,6 +423,30 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </nav>
+
+        {/* Online presence strip */}
+        {onlineMembers.size > 0 && (
+          <div className="px-4 py-2 border-t" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+            <p style={{ color: "#6b7280", fontSize: "0.6rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
+              Online now
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {currentMembers
+                .filter((m) => m.userId && onlineMembers.has(m.userId))
+                .slice(0, 8)
+                .map((m) => (
+                  <div key={m.id} className="relative" title={m.name}>
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                      style={{ background: getAvatarColor(m.name) }}>
+                      {m.name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-gray-900"
+                      style={{ background: "#22c55e" }} />
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
 
         <div className="px-4 py-4 border-t" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
           <div className="flex items-center gap-3">
