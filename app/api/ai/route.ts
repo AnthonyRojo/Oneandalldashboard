@@ -275,7 +275,15 @@ export async function POST(request: NextRequest) {
     if (effectiveProvider === "gemini") {
       const text = await callGemini(messages, system, geminiKey!);
       if (!text.trim()) throw new Error("The AI returned an empty response. Try again.");
-      return NextResponse.json({ text, usedProvider: "gemini" });
+      // Gemini can't execute tools — if it outputs a raw tool_call, re-route to Claude
+      const looksLikeToolCall = /tool_call\s*\{/.test(text) || /"name"\s*:\s*"create_(task|calendar_event)"/.test(text);
+      if (!looksLikeToolCall) {
+        return NextResponse.json({ text, usedProvider: "gemini" });
+      }
+      if (!claudeKey) {
+        return NextResponse.json({ text, usedProvider: "gemini" }); // no Claude key, return as-is
+      }
+      // Fall through to Claude below so tools actually execute
     }
 
     // Claude — enable task creation tool when teamId is present
