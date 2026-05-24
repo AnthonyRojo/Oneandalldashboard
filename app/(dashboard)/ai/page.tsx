@@ -610,18 +610,18 @@ function compressImage(file: File): Promise<PendingImage> {
       const img = new window.Image();
       img.onerror = reject;
       img.onload = () => {
-        const MAX_PX = 1500;
+        // Cap longest edge at 1200px so multi-image payloads stay well under limits
+        const MAX_PX = 1200;
         let { width, height } = img;
-        if (width > MAX_PX) {
-          height = Math.round((height * MAX_PX) / width);
-          width = MAX_PX;
-        }
+        const scale = Math.min(1, MAX_PX / Math.max(width, height));
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
         const canvas = document.createElement("canvas");
         canvas.width = width;
         canvas.height = height;
         canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
         const mimeType = file.type === "image/png" ? "image/png" : "image/jpeg";
-        const dataUrl = canvas.toDataURL(mimeType, 0.82);
+        const dataUrl = canvas.toDataURL(mimeType, 0.78);
         const [prefix, data] = dataUrl.split(",");
         const mt = prefix.split(":")[1].split(";")[0];
         resolve({ data, mimeType: mt, previewUrl: dataUrl });
@@ -820,6 +820,15 @@ export default function AIPage() {
       i === newMessages.length - 1 ? m : { role: m.role, content: m.content }
     );
 
+    // Guard: check total image payload size before sending (base64 chars ≈ bytes in JSON)
+    const totalImageChars = imgs.reduce((sum, img) => sum + img.data.length, 0);
+    const totalMB = (totalImageChars / (1024 * 1024)).toFixed(1);
+    if (totalImageChars > 8 * 1024 * 1024) {
+      setError(`Images total ${totalMB} MB after compression — too large to send together. Try fewer images or smaller files.`);
+      setLoading(false);
+      return;
+    }
+
     try {
       const headers: Record<string, string> = { "content-type": "application/json" };
       if (accessToken) headers["authorization"] = `Bearer ${accessToken}`;
@@ -845,7 +854,7 @@ export default function AIPage() {
       } catch {
         throw new Error(
           res.status === 413
-            ? "Image is too large to send. Try a smaller image (under 5 MB)."
+            ? "Total image payload is too large. Try fewer images or smaller files."
             : `Server error (${res.status}). Please try again.`
         );
       }
