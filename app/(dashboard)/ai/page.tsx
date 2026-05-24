@@ -853,7 +853,7 @@ export default function AIPage() {
       const reply = data.text as string;
       // If the server switched to Claude for image analysis, update the badge
       if (data.usedProvider && data.usedProvider !== provider) {
-        setProviderPerAgent((prev) => ({ ...prev, [activeAgentId]: data.usedProvider }));
+        setProviderPerAgent((prev) => ({ ...prev, [activeAgentId]: data.usedProvider as "claude" | "gemini" }));
       }
       // Append AI reply; append system cards for created tasks/events
       const assistantMessages: Message[] = [{ role: "assistant", content: reply }];
