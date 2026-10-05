@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import {
   getSupabaseAdmin,
-  getAuthUser,
+  requireTeamMember, isAdmin, forbidden,
   unauthorized,
   serverError,
   success,
@@ -21,8 +21,9 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ teamId: string; annId: string; commentId: string }> }
 ) {
-  const user = getAuthUser(request);
-  if (!user) return unauthorized();
+  const auth = await requireTeamMember(request, params);
+  if (auth instanceof Response) return auth;
+  const { user } = auth;
 
   try {
     const { teamId, annId, commentId } = await params;
@@ -41,6 +42,7 @@ export async function PUT(
 
     const comments: AnnouncementComment[] = existing.comments || [];
     const commentIndex = comments.findIndex((c) => c.id === commentId);
+    if (commentIndex !== -1 && comments[commentIndex].authorId !== user.id) return forbidden("You can only edit your own comments");
     if (commentIndex !== -1) {
       comments[commentIndex].content = content;
       comments[commentIndex].editedAt = new Date().toISOString();
@@ -91,8 +93,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ teamId: string; annId: string; commentId: string }> }
 ) {
-  const user = getAuthUser(request);
-  if (!user) return unauthorized();
+  const auth = await requireTeamMember(request, params);
+  if (auth instanceof Response) return auth;
+  const { user } = auth;
 
   try {
     const { teamId, annId, commentId } = await params;
@@ -108,6 +111,8 @@ export async function DELETE(
 
     if (fetchError) throw fetchError;
 
+    const target = (existing.comments || []).find((c: AnnouncementComment) => c.id === commentId) as AnnouncementComment | undefined;
+    if (target && target.authorId !== user.id && !isAdmin(auth.role)) return forbidden("You can only delete your own comments");
     const comments: AnnouncementComment[] = (existing.comments || []).filter(
       (c: AnnouncementComment) => c.id !== commentId
     );

@@ -11,7 +11,7 @@ import {
 
 // GET /api/teams - Get user's teams
 export async function GET(request: NextRequest) {
-  const user = getAuthUser(request);
+  const user = await getAuthUser(request);
   if (!user) return unauthorized();
 
   try {
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
 
 // POST /api/teams - Create a new team
 export async function POST(request: NextRequest) {
-  const user = getAuthUser(request);
+  const user = await getAuthUser(request);
   if (!user) return unauthorized();
 
   try {

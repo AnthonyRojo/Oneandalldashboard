@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import {
-  getSupabaseAdmin, getAuthUser,
+  getSupabaseAdmin, requireTeamMember,
   unauthorized, serverError, success,
 } from "@/lib/api-helpers";
 
@@ -9,8 +9,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ teamId: string; fileId: string }> }
 ) {
-  const user = getAuthUser(request);
-  if (!user) return unauthorized();
+  const auth = await requireTeamMember(request, params);
+  if (auth instanceof Response) return auth;
+  const { user } = auth;
 
   const { teamId, fileId } = await params;
   const supabase = getSupabaseAdmin();
