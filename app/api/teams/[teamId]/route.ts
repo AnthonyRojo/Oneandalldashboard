@@ -1,7 +1,9 @@
 import { NextRequest } from "next/server";
 import {
   getSupabaseAdmin,
-  getAuthUser,
+  requireTeamMember,
+  isAdmin,
+  forbidden,
   unauthorized,
   serverError,
   success,
@@ -12,8 +14,9 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ teamId: string }> }
 ) {
-  const user = getAuthUser(request);
-  if (!user) return unauthorized();
+  const auth = await requireTeamMember(request, params);
+  if (auth instanceof Response) return auth;
+  if (!isAdmin(auth.role)) return forbidden("Only owners and admins can change team settings");
 
   try {
     const { teamId } = await params;

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import {
   getSupabaseAdmin,
-  getAuthUser,
+  requireTeamMember, isAdmin, forbidden,
   unauthorized,
   serverError,
   success,
@@ -12,13 +12,17 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ teamId: string; messageId: string }> }
 ) {
-  const user = getAuthUser(request);
-  if (!user) return unauthorized();
+  const auth = await requireTeamMember(request, params);
+  if (auth instanceof Response) return auth;
+  const { user } = auth;
 
   try {
     const { teamId, messageId } = await params;
     const { content } = await request.json();
     const supabase = getSupabaseAdmin();
+
+    const { data: current } = await supabase.from("messages").select("sender_id").eq("id", messageId).eq("team_id", teamId).maybeSingle();
+    if (current && current.sender_id !== user.id) return forbidden("You can only edit your own messages");
 
     const { data: message, error } = await supabase
       .from("messages")
@@ -52,12 +56,16 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ teamId: string; messageId: string }> }
 ) {
-  const user = getAuthUser(request);
-  if (!user) return unauthorized();
+  const auth = await requireTeamMember(request, params);
+  if (auth instanceof Response) return auth;
+  const { user } = auth;
 
   try {
     const { teamId, messageId } = await params;
     const supabase = getSupabaseAdmin();
+
+    const { data: current } = await supabase.from("messages").select("sender_id").eq("id", messageId).eq("team_id", teamId).maybeSingle();
+    if (current && current.sender_id !== user.id && !isAdmin(auth.role)) return forbidden("You can only delete your own messages");
 
     const { error } = await supabase
       .from("messages")

@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import {
   getSupabaseAdmin,
-  getAuthUser,
+  requireTeamMember,
   unauthorized,
   badRequest,
   serverError,
@@ -14,8 +14,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ teamId: string; taskId: string }> }
 ) {
-  const user = getAuthUser(request);
-  if (!user) return unauthorized();
+  const auth = await requireTeamMember(request, params);
+  if (auth instanceof Response) return auth;
+  const { user } = auth;
 
   try {
     const { teamId, taskId } = await params;

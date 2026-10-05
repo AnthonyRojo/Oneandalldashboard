@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import {
   getSupabaseAdmin,
-  getAuthUser,
+  requireTeamMember,
   logActivity,
   unauthorized,
   serverError,
@@ -13,8 +13,9 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ teamId: string; taskId: string }> }
 ) {
-  const user = getAuthUser(request);
-  if (!user) return unauthorized();
+  const auth = await requireTeamMember(request, params);
+  if (auth instanceof Response) return auth;
+  const { user } = auth;
 
   try {
     const { teamId, taskId } = await params;
@@ -127,8 +128,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ teamId: string; taskId: string }> }
 ) {
-  const user = getAuthUser(request);
-  if (!user) return unauthorized();
+  const auth = await requireTeamMember(request, params);
+  if (auth instanceof Response) return auth;
+  const { user } = auth;
 
   try {
     const { teamId, taskId } = await params;

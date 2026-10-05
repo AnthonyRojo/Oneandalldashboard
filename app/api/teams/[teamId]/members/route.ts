@@ -1,7 +1,9 @@
 import { NextRequest } from "next/server";
 import {
   getSupabaseAdmin,
-  getAuthUser,
+  requireTeamMember,
+  isAdmin,
+  forbidden,
   getInitials,
   logActivity,
   unauthorized,
@@ -15,8 +17,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ teamId: string }> }
 ) {
-  const user = getAuthUser(request);
-  if (!user) return unauthorized();
+  const auth = await requireTeamMember(request, params);
+  if (auth instanceof Response) return auth;
+  const { user } = auth;
 
   try {
     const { teamId } = await params;
@@ -74,12 +77,15 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ teamId: string }> }
 ) {
-  const user = getAuthUser(request);
-  if (!user) return unauthorized();
+  const auth = await requireTeamMember(request, params);
+  if (auth instanceof Response) return auth;
+  const { user } = auth;
 
   try {
     const { teamId } = await params;
-    const { email, role } = await request.json();
+    if (!isAdmin(auth.role)) return forbidden("Only owners and admins can add members");
+    const { email, role: requestedRole } = await request.json();
+    const role = String(requestedRole || "member").toLowerCase() === "admin" ? "admin" : "member";
 
     if (!email?.trim()) {
       return badRequest("Email is required");
@@ -145,7 +151,7 @@ export async function POST(
       name: memberName,
       email: memberEmail,
       avatar: memberAvatar,
-      role: role || "Member",
+      role: role === "admin" ? "Admin" : "Member",
       status: "Available",
     };
 

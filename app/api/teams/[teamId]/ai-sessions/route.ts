@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import {
-  getSupabaseAdmin, getAuthUser,
+  getSupabaseAdmin, requireTeamMember,
   unauthorized, badRequest, serverError, success,
 } from "@/lib/api-helpers";
 
@@ -14,8 +14,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ teamId: string }> }
 ) {
-  const user = getAuthUser(request);
-  if (!user) return unauthorized();
+  const auth = await requireTeamMember(request, params);
+  if (auth instanceof Response) return auth;
+  const { user } = auth;
 
   const { teamId } = await params;
   const { searchParams } = request.nextUrl;
@@ -91,8 +92,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ teamId: string }> }
 ) {
-  const user = getAuthUser(request);
-  if (!user) return unauthorized();
+  const auth = await requireTeamMember(request, params);
+  if (auth instanceof Response) return auth;
+  const { user } = auth;
 
   const { teamId } = await params;
   const body = await request.json();

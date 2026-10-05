@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
-import { getSupabaseAdmin, getAuthUser, logActivity } from "@/lib/api-helpers";
+import { getSupabaseAdmin, getAuthUser, getTeamRole, logActivity } from "@/lib/api-helpers";
 
 type AttachedImage = { data: string; mimeType: string };
 
@@ -206,6 +206,10 @@ async function callGemini(
 }
 
 export async function POST(request: NextRequest) {
+  // Signed-in users only: this spends our AI credits and can read/write team data.
+  const user = await getAuthUser(request);
+  if (!user) return NextResponse.json({ error: "Please sign in again." }, { status: 401 });
+
   let body: {
     messages?: Message[];
     systemPrompt?: string;
@@ -223,6 +227,10 @@ export async function POST(request: NextRequest) {
   const { messages: rawMessages, systemPrompt, fileContext, teamContext, teamId, provider = "claude" } = body;
   if (!rawMessages || !Array.isArray(rawMessages) || rawMessages.length === 0) {
     return NextResponse.json({ error: "Messages are required." }, { status: 400 });
+  }
+  // Team knowledge base and task/event tools are only for members of that team.
+  if (teamId && !(await getTeamRole(teamId, user.id))) {
+    return NextResponse.json({ error: "You don't have access to this team." }, { status: 403 });
   }
   // Hard cap: never send more than 12 messages to the model regardless of client payload
   const messages = rawMessages.slice(-12);
@@ -289,7 +297,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Claude — enable task creation tool when teamId is present
-    const user = getAuthUser(request);
     const tools = teamId ? [CREATE_TASK_TOOL, CREATE_EVENT_TOOL] : undefined;
 
     const { text, toolData } = await callClaude(

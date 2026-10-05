@@ -15,41 +15,67 @@ export function getSupabaseAdmin() {
   );
 }
 
-// Decode JWT to get user info
-function decodeJWT(token: string): Record<string, unknown> | null {
+export type TeamRole = "owner" | "admin" | "member";
+export interface AuthUser { id: string; email: string; }
+
+// Verified sessions are cached briefly so each request doesn't round-trip to
+// Supabase Auth. Entries never outlive the token's own expiry.
+const sessionCache = new Map<string, { user: AuthUser; until: number }>();
+const CACHE_MS = 60_000;
+
+/**
+ * The signed-in user, verified with Supabase Auth (signature, expiry, revocation).
+ * Never trust a decoded-but-unverified JWT: anyone can mint one.
+ */
+export async function getAuthUser(request: NextRequest): Promise<AuthUser | null> {
+  const header = request.headers.get("authorization");
+  if (!header?.startsWith("Bearer ")) return null;
+  const token = header.slice(7).trim();
+  if (!token) return null;
+
+  const now = Date.now();
+  const hit = sessionCache.get(token);
+  if (hit && hit.until > now) return hit.user;
+
   try {
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
-    const json = atob(padded);
-    return JSON.parse(json);
+    const { data, error } = await getSupabaseAdmin().auth.getUser(token);
+    if (error || !data.user) { sessionCache.delete(token); return null; }
+    const user = { id: data.user.id, email: data.user.email ?? "" };
+    let exp = now + CACHE_MS;
+    try { const p = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString()); if (p.exp) exp = Math.min(exp, p.exp * 1000); } catch { /* keep default */ }
+    if (sessionCache.size > 500) sessionCache.clear();
+    sessionCache.set(token, { user, until: exp });
+    return user;
   } catch {
     return null;
   }
 }
 
-// Get authenticated user from request
-export function getAuthUser(request: NextRequest): { id: string; email: string } | null {
-  try {
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer ")) return null;
+/** The user's role in a team, or null if they aren't in it. */
+export async function getTeamRole(teamId: string, userId: string): Promise<TeamRole | null> {
+  const { data } = await getSupabaseAdmin()
+    .from("team_members").select("role").eq("team_id", teamId).eq("user_id", userId).maybeSingle();
+  if (!data) return null;
+  const r = String(data.role || "member").toLowerCase();
+  return r === "owner" || r === "admin" ? r : "member";
+}
 
-    const token = authHeader.slice(7);
-    const payload = decodeJWT(token);
-    if (!payload || !payload.sub) return null;
+export const isAdmin = (role: TeamRole) => role === "owner" || role === "admin";
 
-    // Check expiration
-    const now = Math.floor(Date.now() / 1000);
-    if (payload.exp && (payload.exp as number) < now) return null;
-
-    return {
-      id: payload.sub as string,
-      email: (payload.email ?? "") as string,
-    };
-  } catch {
-    return null;
-  }
+/**
+ * Gate for every /api/teams/[teamId]/… handler: verified user + member of that team.
+ * Returns a Response to send back when access is denied.
+ */
+export async function requireTeamMember(
+  request: NextRequest,
+  params: Promise<{ teamId: string }>
+): Promise<{ user: AuthUser; teamId: string; role: TeamRole } | NextResponse> {
+  const user = await getAuthUser(request);
+  if (!user) return unauthorized();
+  const { teamId } = await params;
+  const role = await getTeamRole(teamId, user.id);
+  if (!role) return forbidden();
+  return { user, teamId, role };
 }
 
 // Log activity helper
@@ -79,6 +105,10 @@ export async function logActivity(
 // Helper responses
 export function unauthorized() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+}
+
+export function forbidden(message = "You don't have access to this") {
+  return NextResponse.json({ error: message }, { status: 403 });
 }
 
 export function badRequest(message: string) {
