@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useDrag } from "react-dnd";
 import { Check, X } from "lucide-react";
-import { CAMPAIGNS, STATUSES, type CampaignId, type PostStatus } from "@/lib/calendar-meta";
-import { C, type Ev } from "./utils";
+import { CAMPAIGNS, PLATFORMS, STATUSES, type CampaignId, type Platform, type PostFormat, type PostStatus } from "@/lib/calendar-meta";
+import { C, FORMAT_ICONS, type Ev } from "./utils";
 
 export const DND_EVENT = "calendar-event";
 export interface DragItem { id: string; }
@@ -126,4 +126,31 @@ export function Kbd({ children }: { children: React.ReactNode }) {
 
 export function CloseButton({ onClick }: { onClick: () => void }) {
   return <IconButton label="Close" onClick={onClick}><X className="w-[18px] h-[18px]" /></IconButton>;
+}
+
+/** Small coloured IG / FB / TT tags. */
+export function PlatformBadges({ platforms, story }: { platforms?: Platform[]; story?: boolean }) {
+  if (!platforms?.length && !story) return null;
+  return (
+    <span className="inline-flex items-center gap-0.5">
+      {(platforms || []).map((p) => (
+        <span key={p} title={PLATFORMS[p].label} className="px-1 rounded text-[9.5px] font-bold leading-[14px] text-white" style={{ background: PLATFORMS[p].color }}>{PLATFORMS[p].short}</span>
+      ))}
+      {story && <span title="Also a story" className="px-1 rounded text-[9.5px] font-bold leading-[14px] border" style={{ borderColor: C.line, color: C.sub }}>+Story</span>}
+    </span>
+  );
+}
+
+export function FormatIcon({ format, className = "w-3 h-3", color }: { format?: PostFormat; className?: string; color?: string }) {
+  if (!format) return null;
+  const Icon = FORMAT_ICONS[format];
+  return <span title={format} className="inline-flex flex-shrink-0" style={{ color }}><Icon className={className} aria-label={format} /></span>;
+}
+
+/** Status shown as a dot: hollow for idea, filled colour otherwise. */
+export function StatusDot({ status }: { status?: PostStatus }) {
+  if (!status || status === "posted") return null;
+  const s = STATUSES[status];
+  return <span title={s.label} aria-label={s.label} className="w-[7px] h-[7px] rounded-full flex-shrink-0"
+    style={status === "idea" ? { border: `1.5px solid ${s.color}` } : { background: s.color }} />;
 }

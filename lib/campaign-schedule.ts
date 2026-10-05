@@ -9,7 +9,7 @@
 //   Session dates for Term 4 aren't confirmed, so date-dependent posts are marked "Waiting on".
 
 import type { EventType } from "@/context/AppContext";
-import type { CampaignId, PostFormat, PostStatus } from "@/lib/calendar-meta";
+import type { CampaignId, Platform, PostFormat, PostStatus } from "@/lib/calendar-meta";
 
 export interface ScheduleItem {
   src: string;
@@ -27,6 +27,8 @@ export interface ScheduleItem {
   needs?: string;
   caption?: string;
   hashtags?: string;
+  platforms?: Platform[];
+  story?: boolean;
 }
 
 const VENUE = "21 Munda St, Randwick";
@@ -176,7 +178,22 @@ export const FASHIONABLE: ScheduleItem[] = [
   {"src": "fa-31", "date": "2026-12-03", "title": "International Day of People with Disability: “How it felt to walk”", "type": "Post", "campaign": "fashionable", "format": "Reel", "status": "waiting", "tbc": true, "notes": "Participant reflections; recap in the next Hub Letter.\nFormat: Reel / cards", "needs": "Short clips or quotes, consent"},
 ];
 
+// Posts go out on Instagram (the sheets talk about link in bio, story stickers);
+// EDMs go by email. "Feed + Story" rows in the sheet also go up as a story.
+const withDefaults = (s: ScheduleItem): ScheduleItem => s.type !== "Post" ? s : {
+  ...s,
+  platforms: s.platforms || (s.format === "EDM" ? ["email"] : ["instagram"]),
+  story: s.story ?? /Feed \+ Story/.test(s.notes || ""),
+};
+
 export const SCHEDULE_GROUPS: { id: CampaignId; label: string; blurb: string; items: ScheduleItem[] }[] = [
-  { id: "hub-after-hours", label: "Hub After Hours", blurb: "Sessions, Open Day and a Tue/Thu promo plan to mid-December", items: HUB_AFTER_HOURS },
-  { id: "fashionable", label: "fashionABLE Show", blurb: "The show plus all 31 posts from the social schedule", items: FASHIONABLE },
+  { id: "hub-after-hours", label: "Hub After Hours", blurb: "Sessions, Open Day and a Tue/Thu promo plan to mid-December", items: HUB_AFTER_HOURS.map(withDefaults) },
+  { id: "fashionable", label: "fashionABLE Show", blurb: "The show plus all 31 posts from the social schedule", items: FASHIONABLE.map(withDefaults) },
 ];
+
+/** Finds the calendar item a schedule row was imported as (by src id, else title + date). */
+export function scheduleMatcher<T extends { title: string; date: string; meta: { src?: string } }>(existing: T[]) {
+  const bySrc = new Map<string, T>(); const byKey = new Map<string, T>();
+  existing.forEach((e) => { if (e.meta.src) bySrc.set(e.meta.src, e); byKey.set(`${e.title.trim().toLowerCase()}|${e.date}`, e); });
+  return (s: ScheduleItem) => bySrc.get(s.src) || byKey.get(`${s.title.trim().toLowerCase()}|${s.date}`);
+}

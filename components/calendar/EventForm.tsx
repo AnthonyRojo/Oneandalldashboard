@@ -2,14 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { format, parseISO, addWeeks } from "date-fns";
-import { Trash2 } from "lucide-react";
+import { Check, Trash2 } from "lucide-react";
 import type { EventType } from "@/context/AppContext";
 import DatePicker from "@/components/ui/DatePicker";
 import {
-  CAMPAIGNS, CAMPAIGN_IDS, STATUSES, STATUS_IDS, FORMATS, LOCKED_HASHTAGS, CAMPAIGN_HASHTAGS,
+  CAMPAIGNS, CAMPAIGN_IDS, STATUSES, STATUS_IDS, FORMATS, LOCKED_HASHTAGS, CAMPAIGN_HASHTAGS, PLATFORMS, PLATFORM_IDS, POST_TIMES, IG,
   type PostFormat, type PostStatus,
 } from "@/lib/calendar-meta";
-import { C, EVENT_COLORS, EVENT_ICONS, EVENT_LABELS, EVENT_TYPES, addMinutes, toMin, type FormValues } from "./utils";
+import { C, EVENT_COLORS, EVENT_ICONS, EVENT_LABELS, EVENT_TYPES, FORMAT_ICONS, addMinutes, toMin, hashtagCount, type FormValues } from "./utils";
 import { Drawer, CloseButton, Kbd } from "./ui";
 
 interface Props {
@@ -50,7 +50,9 @@ export default function EventForm({ mode, initial, onCancel, onSave, onDelete }:
     const dur = v.start && v.end ? Math.max(toMin(v.end) - toMin(v.start), 15) : 60;
     set({ start, end: addMinutes(start, dur) });
   };
-  const changeType = (type: EventType) => set({ type, tbc: type === "Post" ? v.tbc : false });
+  const changeType = (type: EventType) => set({ type, tbc: type === "Post" ? v.tbc : false, platforms: type === "Post" && !v.platforms.length ? ["instagram"] : v.platforms });
+  const togglePlatform = (p: (typeof PLATFORM_IDS)[number]) => set({ platforms: v.platforms.includes(p) ? v.platforms.filter((x) => x !== p) : [...v.platforms, p] });
+  const tagCount = hashtagCount(v.hashtags);
   const addLockedTags = () => {
     const extra = v.campaign ? CAMPAIGN_HASHTAGS[v.campaign] : "";
     const want = `${LOCKED_HASHTAGS}${extra ? ` ${extra}` : ""}`.split(" ");
@@ -151,21 +153,59 @@ export default function EventForm({ mode, initial, onCancel, onSave, onDelete }:
                 {errors.time && <p className="text-xs mt-1" style={{ color: "#DC2626" }}>{errors.time}</p>}
               </>
             )}
+            {isPost && (
+              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                <span className="text-[11px] mr-0.5" style={{ color: C.faint }}>Post at</span>
+                {POST_TIMES.map(({ time, label: l }) => {
+                  const on = !v.tbc && v.start === time;
+                  return (
+                    <button key={time} type="button" onClick={() => set({ tbc: false, start: time, end: addMinutes(time, 15) })} aria-pressed={on}
+                      className="px-2.5 py-0.5 rounded-full text-[11.5px] font-medium border"
+                      style={{ borderColor: on ? C.accent : C.line, background: on ? "#FFF7E0" : "white", color: on ? C.accentInk : C.sub }}>
+                      {l}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {isPost && (
             <div className="rounded-2xl p-4 flex flex-col gap-4" style={{ background: "#FAF9F6", border: `1px solid ${C.lineSoft}` }}>
               <div>
+                <span className={label} style={{ color: C.sub }}>Where it goes</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {PLATFORM_IDS.map((p) => {
+                    const on = v.platforms.includes(p); const k = PLATFORMS[p];
+                    return (
+                      <button key={p} type="button" onClick={() => togglePlatform(p)} aria-pressed={on}
+                        className="px-2.5 py-1 rounded-lg text-[12.5px] font-medium border inline-flex items-center gap-1.5"
+                        style={{ borderColor: on ? k.color : C.line, background: on ? `${k.color}12` : "white", color: on ? k.color : C.sub }}>
+                        {on && <Check className="w-3.5 h-3.5" />}{k.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
                 <span className={label} style={{ color: C.sub }}>Format</span>
                 <div className="flex flex-wrap gap-1.5">
-                  {FORMATS.map((f) => (
-                    <button key={f} type="button" onClick={() => set({ format: v.format === f ? "" : (f as PostFormat) })} aria-pressed={v.format === f}
-                      className="px-2.5 py-1 rounded-lg text-[12.5px] font-medium border"
-                      style={{ borderColor: v.format === f ? C.ink : C.line, background: v.format === f ? C.ink : "white", color: v.format === f ? "white" : C.sub }}>
-                      {f}
-                    </button>
-                  ))}
+                  {FORMATS.map((f) => {
+                    const Icon = FORMAT_ICONS[f];
+                    return (
+                      <button key={f} type="button" onClick={() => set({ format: v.format === f ? "" : (f as PostFormat) })} aria-pressed={v.format === f}
+                        className="px-2.5 py-1 rounded-lg text-[12.5px] font-medium border inline-flex items-center gap-1.5"
+                        style={{ borderColor: v.format === f ? C.ink : C.line, background: v.format === f ? C.ink : "white", color: v.format === f ? "white" : C.sub }}>
+                        <Icon className="w-3.5 h-3.5" />{f}
+                      </button>
+                    );
+                  })}
                 </div>
+                {v.format !== "Story" && v.format !== "EDM" && (
+                  <label className="mt-2 flex items-center gap-1.5 text-[12.5px] cursor-pointer" style={{ color: C.sub }}>
+                    <input type="checkbox" checked={v.story} onChange={(e) => set({ story: e.target.checked })} className="accent-amber-500" /> Share to stories too
+                  </label>
+                )}
               </div>
               <div>
                 <span className={label} style={{ color: C.sub }}>Status</span>
@@ -182,15 +222,23 @@ export default function EventForm({ mode, initial, onCancel, onSave, onDelete }:
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-[12px] font-medium" style={{ color: C.sub }} htmlFor="oa-caption">Caption</label>
-                  <span className="text-[11px] tabular-nums" style={{ color: v.caption.length > 2200 ? "#DC2626" : C.faint }}>{v.caption.length}/2200</span>
+                  <span className="text-[11px] tabular-nums" style={{ color: v.caption.length > IG.captionMax ? "#DC2626" : C.faint }}>{v.caption.length}/{IG.captionMax}</span>
                 </div>
                 <textarea id="oa-caption" value={v.caption} onChange={(e) => set({ caption: e.target.value })} rows={5} className={input} style={{ borderColor: C.line }}
                   placeholder="Write it how it'll go out. End with one clear call to action." />
+                {v.caption.length > IG.fold && (
+                  <p className="text-[11px] mt-1 leading-snug" style={{ color: C.faint }}>
+                    Before &ldquo;more&rdquo;: <span style={{ color: C.sub }}>&ldquo;{v.caption.split("\n")[0].slice(0, IG.fold).trimEnd()}…&rdquo;</span>
+                  </p>
+                )}
               </div>
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-[12px] font-medium" style={{ color: C.sub }} htmlFor="oa-tags">Hashtags</label>
-                  <button type="button" onClick={addLockedTags} className="text-[11.5px] font-medium hover:underline" style={{ color: C.accentInk }}>Add our usual set</button>
+                  <span className="flex items-center gap-2">
+                    <span className="text-[11px] tabular-nums" style={{ color: tagCount > IG.hashtagMax ? "#DC2626" : C.faint }}>{tagCount}/{IG.hashtagMax}</span>
+                    <button type="button" onClick={addLockedTags} className="text-[11.5px] font-medium hover:underline" style={{ color: C.accentInk }}>Add our usual set</button>
+                  </span>
                 </div>
                 <input id="oa-tags" value={v.hashtags} onChange={(e) => set({ hashtags: e.target.value })} className={input} style={{ borderColor: C.line }} placeholder={LOCKED_HASHTAGS} />
               </div>

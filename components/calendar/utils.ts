@@ -1,9 +1,9 @@
 import { format, parseISO, differenceInCalendarDays } from "date-fns";
 import type { CalendarEvent, EventType } from "@/context/AppContext";
-import { Video, Eye, FileText, CalendarClock } from "lucide-react";
+import { Video, Eye, FileText, CalendarClock, Clapperboard, GalleryHorizontalEnd, Image, CircleDashed, Mail, Shapes } from "lucide-react";
 import {
-  CAMPAIGNS, parseEventMeta, buildDescription,
-  type CampaignId, type EventMeta, type PostFormat, type PostStatus,
+  CAMPAIGNS, PLATFORMS, IG, parseEventMeta, buildDescription,
+  type CampaignId, type EventMeta, type Platform, type PostFormat, type PostStatus,
 } from "@/lib/calendar-meta";
 
 export const EVENT_COLORS: Record<EventType, string> = {
@@ -15,6 +15,9 @@ export const EVENT_COLORS: Record<EventType, string> = {
 export const EVENT_LABELS: Record<EventType, string> = { Post: "Post", Meeting: "Meeting", Review: "Review", Other: "Event" };
 export const EVENT_ICONS: Record<EventType, typeof Video> = { Meeting: Video, Review: Eye, Post: FileText, Other: CalendarClock };
 export const EVENT_TYPES: EventType[] = ["Post", "Other", "Meeting", "Review"];
+export const FORMAT_ICONS: Record<PostFormat, typeof Video> = {
+  Reel: Clapperboard, Carousel: GalleryHorizontalEnd, Static: Image, Story: CircleDashed, Video: Video, EDM: Mail, Other: Shapes,
+};
 export const WEEK_OPTS = { weekStartsOn: 1 as const }; // Monday-first (AU)
 
 export const C = {
@@ -82,6 +85,32 @@ export const isOverdue = (e: Ev, today: string) =>
   e.type === "Post" && !!e.meta.status && e.meta.status !== "posted" && e.date < today;
 export const isPosted = (e: Ev) => e.meta.status === "posted";
 
+/** "52 days to the show" style countdown for posts in a campaign with a key date. */
+export function countdown(e: { date: string; meta: EventMeta }) {
+  const k = e.meta.campaign ? CAMPAIGNS[e.meta.campaign] : undefined;
+  if (!k?.date) return null;
+  const n = differenceInCalendarDays(parseISO(k.date), parseISO(e.date));
+  const what = k.dateLabel || "date";
+  return { n, label: n === 0 ? `${what[0].toUpperCase()}${what.slice(1)} day` : n > 0 ? `${n} day${n === 1 ? "" : "s"} to the ${what}` : `${-n} day${n === -1 ? "" : "s"} after the ${what}`, short: n === 0 ? "D-day" : n > 0 ? `D-${n}` : `D+${-n}` };
+}
+
+export const hashtagCount = (tags?: string) => (tags || "").split(/\s+/).filter((t) => t.startsWith("#")).length;
+
+/** What still has to happen before a post can go out. Ticked items first. */
+export function readiness(e: { type: EventType; link?: string; meta: EventMeta }) {
+  if (e.type !== "Post") return null;
+  const m = e.meta;
+  const checks = [
+    { ok: !!m.format, label: "Format chosen" },
+    { ok: !!m.caption?.trim(), label: "Caption written" },
+    { ok: hashtagCount(m.hashtags) > 0 && hashtagCount(m.hashtags) <= IG.hashtagMax, label: hashtagCount(m.hashtags) > IG.hashtagMax ? `Too many hashtags (max ${IG.hashtagMax})` : "Hashtags added" },
+    { ok: !!m.asset?.trim(), label: "Files linked" },
+    { ok: !m.needs?.trim(), label: m.needs?.trim() ? `Waiting on: ${m.needs.trim()}` : "Nothing blocking" },
+    { ok: !!m.platforms?.length, label: m.platforms?.length ? `Going to ${m.platforms.map((p) => PLATFORMS[p].label).join(", ")}` : "Platform picked" },
+  ];
+  return { checks, done: checks.filter((c) => c.ok).length, total: checks.length };
+}
+
 // ── Form model ───────────────────────────────────────────────────────────────
 
 export interface FormValues {
@@ -95,6 +124,8 @@ export interface FormValues {
   repeatWeeks: number;
   status: PostStatus;
   format: PostFormat | "";
+  platforms: Platform[];
+  story: boolean;
   caption: string;
   hashtags: string;
   asset: string;
@@ -108,13 +139,13 @@ export const blankForm = (date: string, type: EventType = "Post", start?: string
   title: "", type, campaign: "", date,
   start: start || "10:00", end: addMinutes(start || "10:00", 60),
   tbc: type === "Post" && !start, repeatWeeks: 1,
-  status: "idea", format: "", caption: "", hashtags: "", asset: "", needs: "", link: "", notes: "",
+  status: "idea", format: "", platforms: type === "Post" ? ["instagram"] : [], story: false, caption: "", hashtags: "", asset: "", needs: "", link: "", notes: "",
 });
 
 export const formFromEvent = (e: Ev): FormValues => ({
   title: e.title, type: e.type, campaign: e.meta.campaign || "", date: e.date,
   start: e.start || "10:00", end: e.end || e.start || "11:00", tbc: !!e.meta.tbc, repeatWeeks: 1,
-  status: e.meta.status || "idea", format: e.meta.format || "",
+  status: e.meta.status || "idea", format: e.meta.format || "", platforms: e.meta.platforms || [], story: !!e.meta.story,
   caption: e.meta.caption || "", hashtags: e.meta.hashtags || "", asset: e.meta.asset || "", needs: e.meta.needs || "",
   link: e.link || "", notes: e.body, src: e.meta.src,
 });
@@ -127,6 +158,8 @@ export function payloadFromForm(v: FormValues, dateOverride?: string) {
     tbc: v.tbc || undefined,
     status: isPost ? v.status : undefined,
     format: isPost && v.format ? v.format : undefined,
+    platforms: isPost && v.platforms.length ? v.platforms : undefined,
+    story: isPost && v.story && v.format !== "Story" ? true : undefined,
     caption: isPost ? v.caption : undefined,
     hashtags: isPost ? v.hashtags : undefined,
     asset: v.asset || undefined,
@@ -162,11 +195,12 @@ function download(name: string, mime: string, text: string) {
 }
 
 export function exportCsv(events: Ev[]) {
-  const head = ["Date", "Day", "Time", "Title", "Type", "Campaign", "Format", "Status", "Needs", "Caption", "Hashtags", "Asset", "Link", "Notes"];
+  const head = ["Date", "Day", "Time", "Title", "Type", "Campaign", "Format", "Platforms", "Status", "Needs", "Caption", "Hashtags", "Asset", "Link", "Notes"];
   const esc = (s: string) => `"${(s || "").replace(/"/g, '""')}"`;
   const rows = events.map((e) => [
     e.date, format(parseISO(e.date), "EEE"), timeLabel(e), e.title, EVENT_LABELS[e.type],
-    e.meta.campaign ? CAMPAIGNS[e.meta.campaign].label : "", e.meta.format || "",
+    e.meta.campaign ? CAMPAIGNS[e.meta.campaign].label : "", `${e.meta.format || ""}${e.meta.story ? " + Story" : ""}`,
+    (e.meta.platforms || []).map((p) => PLATFORMS[p].label).join(", "),
     e.meta.status ? e.meta.status : "", e.meta.needs || "", e.meta.caption || "", e.meta.hashtags || "",
     e.meta.asset || "", e.link || "", e.body,
   ].map(esc).join(","));

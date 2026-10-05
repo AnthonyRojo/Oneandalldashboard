@@ -4,18 +4,14 @@ import { useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { Check } from "lucide-react";
 import { CAMPAIGNS, type CampaignId } from "@/lib/calendar-meta";
-import { SCHEDULE_GROUPS, type ScheduleItem } from "@/lib/campaign-schedule";
+import { SCHEDULE_GROUPS, scheduleMatcher, type ScheduleItem } from "@/lib/campaign-schedule";
 import { C, fmt12, type Ev } from "./utils";
 import { Modal, CloseButton, StatusPill } from "./ui";
 
 export interface ImportPlan { create: ScheduleItem[]; update: { id: string; item: ScheduleItem }[]; }
 
 export default function ImportModal({ existing, onClose, onImport }: { existing: Ev[]; onClose: () => void; onImport: (p: ImportPlan) => Promise<void> }) {
-  const match = useMemo(() => {
-    const bySrc = new Map<string, Ev>(); const byKey = new Map<string, Ev>();
-    existing.forEach((e) => { if (e.meta.src) bySrc.set(e.meta.src, e); byKey.set(`${e.title.trim().toLowerCase()}|${e.date}`, e); });
-    return (s: ScheduleItem) => bySrc.get(s.src) || byKey.get(`${s.title.trim().toLowerCase()}|${s.date}`);
-  }, [existing]);
+  const match = useMemo(() => scheduleMatcher(existing), [existing]);
   const [picked, setPicked] = useState<Set<CampaignId>>(new Set(SCHEDULE_GROUPS.map((g) => g.id)));
   const [refresh, setRefresh] = useState(false);
   const [busy, setBusy] = useState(false);

@@ -5,7 +5,14 @@ import { useDrop } from "react-dnd";
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, getDay } from "date-fns";
 import { Check, Plus, X } from "lucide-react";
 import { C, dkey, fmt12, timeLabel, WEEK_OPTS, type Ev } from "./utils";
-import { DND_EVENT, useEventDrag, type DragItem, EventTitle, StatusPill } from "./ui";
+import { CAMPAIGNS, CAMPAIGN_IDS } from "@/lib/calendar-meta";
+import { DND_EVENT, useEventDrag, type DragItem, EventTitle, StatusPill, StatusDot, FormatIcon, PlatformBadges } from "./ui";
+
+// Campaign key dates (e.g. show night) get a label in their day cell.
+const KEY_DATES = new Map(CAMPAIGN_IDS.flatMap((c) => {
+  const k = CAMPAIGNS[c];
+  return k.date ? [[k.date, { label: `${k.short} ${k.dateLabel || ""}`.trim(), color: k.color }] as const] : [];
+}));
 
 interface Props {
   cursor: Date;
@@ -62,6 +69,7 @@ function MonthCell({ dateKey, day, events, inMonth, isToday, isPast, lastCol, la
   const weekend = getDay(day) === 0 || getDay(day) === 6;
   const shown = events.length > MAX ? events.slice(0, MAX - 1) : events;
   const hidden = events.length - shown.length;
+  const key = KEY_DATES.get(dateKey);
 
   return (
     <div ref={drop as unknown as React.Ref<HTMLDivElement>}
@@ -70,7 +78,8 @@ function MonthCell({ dateKey, day, events, inMonth, isToday, isPast, lastCol, la
       style={{
         borderRight: lastCol ? "none" : `1px solid ${C.lineSoft}`,
         borderBottom: lastRow ? "none" : `1px solid ${C.lineSoft}`,
-        background: isOver ? "#FFF7D6" : weekend ? "#FBFAF7" : "white",
+        background: isOver ? "#FFF7D6" : key ? `${key.color}0F` : weekend ? "#FBFAF7" : "white",
+        boxShadow: key && !isOver ? `inset 0 0 0 2px ${key.color}55` : undefined,
         outline: isOver ? `2px dashed ${C.accent}` : "none", outlineOffset: -3,
       }}>
       <div className="flex items-center justify-between mb-1 px-0.5">
@@ -82,6 +91,7 @@ function MonthCell({ dateKey, day, events, inMonth, isToday, isPast, lastCol, la
           }}>
           {format(day, "d")}
         </span>
+        {key && <span className="hidden sm:block mr-auto ml-1 text-[10.5px] font-bold uppercase tracking-wide truncate" style={{ color: key.color }}>{key.label}</span>}
         <span className="hidden sm:inline-flex w-6 h-6 rounded-md items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: C.accentInk, background: "#FFF4D6" }} aria-hidden>
           <Plus className="w-3.5 h-3.5" />
         </span>
@@ -136,6 +146,8 @@ function DayPopover({ dateKey, day, events, onClose, onOpen, onCreate, alignRigh
             <div className="flex items-center gap-2 mt-0.5">
               <span className="text-[11px]" style={{ color: C.sub }}>{timeLabel(e)}</span>
               {e.type === "Post" && <StatusPill status={e.meta.status} size="xs" />}
+              {e.type === "Post" && <FormatIcon format={e.meta.format} color={C.sub} />}
+              <PlatformBadges platforms={e.meta.platforms} story={e.meta.story} />
             </div>
           </button>
         ))}
@@ -154,7 +166,7 @@ function Pill({ e, onOpen }: { e: Ev; onOpen: (e: Ev) => void }) {
   const isEvent = e.type !== "Post";
   return (
     <button ref={dragRef} type="button" onClick={(ev) => { ev.stopPropagation(); onOpen(e); }}
-      title={`${e.title} · ${timeLabel(e)}`}
+      title={`${e.title} · ${timeLabel(e)}${e.type === "Post" ? ` · ${e.meta.format || "Post"} · ${e.meta.status || "idea"}` : ""}`}
       className="w-full text-left rounded-[5px] px-1.5 py-[3px] text-[11.5px] leading-[15px] flex items-center gap-1 min-w-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400"
       style={{
         background: isEvent ? e.color : `${e.color}14`,
@@ -165,6 +177,8 @@ function Pill({ e, onOpen }: { e: Ev; onOpen: (e: Ev) => void }) {
         cursor: "grab",
       }}>
       {posted && <Check className="w-3 h-3 flex-shrink-0" style={{ color: e.color }} />}
+      {!isEvent && !posted && <StatusDot status={e.meta.status || "idea"} />}
+      {!isEvent && <FormatIcon format={e.meta.format} color={e.color} />}
       {!e.meta.tbc && e.start && <span className="flex-shrink-0 font-semibold tabular-nums" style={{ color: isEvent ? "rgba(255,255,255,.85)" : e.color }}>{fmt12(e.start)}</span>}
       <span className="truncate" style={{ textDecoration: posted ? "line-through" : undefined }}>{e.title}</span>
     </button>

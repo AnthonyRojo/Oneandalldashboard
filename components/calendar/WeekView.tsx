@@ -5,7 +5,7 @@ import { useDrop } from "react-dnd";
 import { format, startOfWeek, eachDayOfInterval, endOfWeek, getDay } from "date-fns";
 import { Check } from "lucide-react";
 import { C, dkey, fmt12, timeLabel, toMin, fromMin, WEEK_OPTS, type Ev } from "./utils";
-import { DND_EVENT, useEventDrag, type DragItem, StatusPill } from "./ui";
+import { DND_EVENT, useEventDrag, type DragItem, StatusPill, StatusDot, FormatIcon } from "./ui";
 
 const HOUR = 52; // px per hour
 const SNAP = 15;
@@ -105,6 +105,8 @@ function UntimedChip({ e, onOpen }: { e: Ev; onOpen: (e: Ev) => void }) {
       className="text-left px-1.5 py-[3px] text-[11.5px] leading-[15px] truncate flex items-center gap-1"
       style={{ background: `${e.color}14`, borderLeft: `3px solid ${e.color}`, borderRadius: "2px 5px 5px 2px", color: C.ink, opacity: isDragging ? 0.35 : posted ? 0.6 : 1, cursor: "grab" }}>
       {posted && <Check className="w-3 h-3 flex-shrink-0" style={{ color: e.color }} />}
+      {e.type === "Post" && !posted && <StatusDot status={e.meta.status || "idea"} />}
+      {e.type === "Post" && <FormatIcon format={e.meta.format} color={e.color} />}
       <span className="truncate" style={{ textDecoration: posted ? "line-through" : undefined }}>{e.title}</span>
     </button>
   );
@@ -193,7 +195,9 @@ function TimedBlock({ e, top, height, left, width, onOpen }: { e: Ev; top: numbe
         borderLeft: isEvent ? "none" : `3px solid ${e.color}`,
         opacity: isDragging ? 0.35 : 1, cursor: "grab", boxShadow: "0 1px 2px rgba(0,0,0,.06)",
       }}>
-      <p className="text-[11.5px] font-semibold leading-tight truncate">{e.title}</p>
+      <p className="text-[11.5px] font-semibold leading-tight truncate flex items-center gap-1">
+        {e.type === "Post" && <FormatIcon format={e.meta.format} color={e.color} />}<span className="truncate">{e.title}</span>
+      </p>
       {height > 34 && <p className="text-[10.5px] leading-tight mt-0.5 tabular-nums" style={{ opacity: 0.85 }}>{timeLabel(e)}</p>}
       {height > 60 && e.type === "Post" && <div className="mt-1"><StatusPill status={e.meta.status} size="xs" /></div>}
     </button>

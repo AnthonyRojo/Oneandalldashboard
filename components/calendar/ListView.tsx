@@ -4,8 +4,8 @@ import { useMemo, useState } from "react";
 import { format, parseISO, startOfWeek } from "date-fns";
 import { AlertTriangle, Trash2, X } from "lucide-react";
 import { STATUSES, STATUS_IDS, type PostStatus } from "@/lib/calendar-meta";
-import { C, EVENT_LABELS, relDay, timeLabel, WEEK_OPTS, dkey, type Ev } from "./utils";
-import { CampaignTag, EventTitle } from "./ui";
+import { C, EVENT_LABELS, relDay, timeLabel, WEEK_OPTS, dkey, countdown, type Ev } from "./utils";
+import { CampaignTag, EventTitle, FormatIcon, PlatformBadges } from "./ui";
 
 interface Props {
   events: Ev[];
@@ -110,8 +110,10 @@ export default function ListView({ events, today, filtersActive, onOpen, onCreat
                   </p>
                   <div className="flex items-center gap-x-3 gap-y-1 mt-1 flex-wrap text-[11.5px]" style={{ color: C.sub }}>
                     <CampaignTag c={e.meta.campaign} />
-                    <span>{e.type === "Post" ? e.meta.format || "Post" : EVENT_LABELS[e.type]}</span>
+                    <span className="inline-flex items-center gap-1">{e.type === "Post" && <FormatIcon format={e.meta.format} />}{e.type === "Post" ? e.meta.format || "Post" : EVENT_LABELS[e.type]}</span>
+                    <PlatformBadges platforms={e.meta.platforms} story={e.meta.story} />
                     <span>{timeLabel(e)}</span>
+                    {(() => { const cd = countdown(e); return cd && cd.n >= 0 ? <span className="font-semibold tabular-nums" style={{ color: e.color }} title={cd.label}>{cd.short}</span> : null; })()}
                     {e.meta.needs && e.meta.status !== "posted" && (
                       <span className="inline-flex items-center gap-1" style={{ color: "#8A4B06" }}><AlertTriangle className="w-3 h-3" />{e.meta.needs}</span>
                     )}
