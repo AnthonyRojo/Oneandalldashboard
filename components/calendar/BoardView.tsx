@@ -5,8 +5,8 @@ import { useDrop } from "react-dnd";
 import { format, parseISO, subDays } from "date-fns";
 import { AlertTriangle, Plus } from "lucide-react";
 import { STATUSES, STATUS_IDS, type PostStatus } from "@/lib/calendar-meta";
-import { C, dkey, relDay, type Ev } from "./utils";
-import { DND_EVENT, useEventDrag, type DragItem, CampaignTag } from "./ui";
+import { C, dkey, relDay, countdown, readiness, type Ev } from "./utils";
+import { DND_EVENT, useEventDrag, type DragItem, CampaignTag, FormatIcon, PlatformBadges } from "./ui";
 
 interface Props {
   events: Ev[];
@@ -74,6 +74,8 @@ function Column({ status, events, today, onOpen, onStatus, onCreate }: {
 function Card({ e, today, onOpen }: { e: Ev; today: string; onOpen: (e: Ev) => void }) {
   const { isDragging, dragRef } = useEventDrag(e.id);
   const overdue = e.meta.status !== "posted" && e.date < today;
+  const cd = countdown(e);
+  const r = readiness(e);
   return (
     <button ref={dragRef} type="button" onClick={() => onOpen(e)}
       className="text-left bg-white rounded-xl p-3 border hover:border-stone-300 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400"
@@ -82,15 +84,25 @@ function Card({ e, today, onOpen }: { e: Ev; today: string; onOpen: (e: Ev) => v
         <span className="text-[11px] font-medium tabular-nums" style={{ color: overdue ? "#B91C1C" : C.sub }}>
           {format(parseISO(e.date), "EEE d MMM")} · {relDay(e.date)}
         </span>
-        {e.meta.format && <span className="text-[10.5px]" style={{ color: C.faint }}>{e.meta.format}</span>}
+        {e.meta.format && <span className="text-[10.5px] inline-flex items-center gap-1" style={{ color: C.sub }}><FormatIcon format={e.meta.format} />{e.meta.format}</span>}
       </div>
       <p className="text-[13px] font-medium leading-snug" style={{ color: C.ink }}>{e.title}</p>
       <div className="flex items-center gap-2 mt-1.5 flex-wrap">
         <CampaignTag c={e.meta.campaign} />
+        <PlatformBadges platforms={e.meta.platforms} story={e.meta.story} />
+        {cd && cd.n >= 0 && <span className="text-[10.5px] font-semibold tabular-nums" style={{ color: e.color }} title={cd.label}>{cd.short}</span>}
         {overdue && <span className="inline-flex items-center gap-1 text-[10.5px] font-medium" style={{ color: "#B91C1C" }}><AlertTriangle className="w-3 h-3" />Overdue</span>}
       </div>
       {e.meta.needs && e.meta.status !== "posted" && (
         <p className="mt-2 text-[11px] leading-snug rounded-md px-2 py-1" style={{ background: "#FFF6E0", color: "#8A4B06" }}>Needs: {e.meta.needs}</p>
+      )}
+      {r && e.meta.status !== "posted" && (
+        <div className="mt-2 flex items-center gap-2" title={r.checks.filter((c) => !c.ok).map((c) => c.label).join("\n") || "Good to go"}>
+          <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: "#EFEDE7" }}>
+            <div className="h-full rounded-full" style={{ width: `${(r.done / r.total) * 100}%`, background: r.done === r.total ? "#15803D" : C.accent }} />
+          </div>
+          <span className="text-[10px] tabular-nums" style={{ color: C.faint }}>{r.done}/{r.total}</span>
+        </div>
       )}
     </button>
   );

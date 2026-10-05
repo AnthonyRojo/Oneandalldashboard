@@ -8,11 +8,16 @@
 export type CampaignId = "fashionable" | "hub-after-hours" | "gifts4good" | "general";
 export type PostStatus = "idea" | "in-progress" | "waiting" | "ready" | "posted";
 export type PostFormat = "Reel" | "Carousel" | "Static" | "Story" | "Video" | "EDM" | "Other";
+export type Platform = "instagram" | "facebook" | "tiktok" | "linkedin" | "email";
 
 export interface EventMeta {
   campaign?: CampaignId;
   status?: PostStatus;
   format?: PostFormat;
+  /** Where it goes out. Missing on older posts — treat as unknown, not "none". */
+  platforms?: Platform[];
+  /** Also goes up as a story (e.g. "Feed + Story" in the schedule sheet) */
+  story?: boolean;
   /** Time not confirmed yet — UI shows "No set time" instead of a clock time. */
   tbc?: boolean;
   caption?: string;
@@ -43,6 +48,26 @@ export const STATUSES: Record<PostStatus, { label: string; color: string; bg: st
 export const STATUS_IDS = Object.keys(STATUSES) as PostStatus[];
 
 export const FORMATS: PostFormat[] = ["Reel", "Carousel", "Static", "Story", "Video", "EDM", "Other"];
+
+export const PLATFORMS: Record<Platform, { label: string; short: string; color: string }> = {
+  instagram: { label: "Instagram", short: "IG", color: "#C13584" },
+  facebook: { label: "Facebook", short: "FB", color: "#1877F2" },
+  tiktok: { label: "TikTok", short: "TT", color: "#111111" },
+  linkedin: { label: "LinkedIn", short: "IN", color: "#0A66C2" },
+  email: { label: "Email / EDM", short: "EDM", color: "#78716C" },
+};
+export const PLATFORM_IDS = Object.keys(PLATFORMS) as Platform[];
+
+/** Instagram rules the form and preview check against. */
+export const IG = { captionMax: 2200, fold: 125, hashtagMax: 30 };
+
+/** Common posting slots for a Sydney audience (quick picks in the form). */
+export const POST_TIMES: { time: string; label: string }[] = [
+  { time: "08:00", label: "8am commute" },
+  { time: "12:00", label: "12pm lunch" },
+  { time: "18:00", label: "6pm after work" },
+  { time: "19:30", label: "7:30pm evening" },
+];
 
 export const LOCKED_HASHTAGS = "#OneAndAll #SydneyNDIS #Randwick";
 export const CAMPAIGN_HASHTAGS: Partial<Record<CampaignId, string>> = {

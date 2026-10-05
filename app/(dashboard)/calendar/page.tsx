@@ -9,8 +9,11 @@ import {
   CalendarRange, Columns3, KanbanSquare, List, X, Check, Keyboard,
 } from "lucide-react";
 import { useApp, type EventType } from "@/context/AppContext";
-import { buildDescription, STATUSES, STATUS_IDS, type CampaignId, type PostStatus } from "@/lib/calendar-meta";
-import type { ScheduleItem } from "@/lib/campaign-schedule";
+import {
+  buildDescription, STATUSES, STATUS_IDS, FORMATS, PLATFORMS, PLATFORM_IDS,
+  type CampaignId, type Platform, type PostFormat, type PostStatus,
+} from "@/lib/calendar-meta";
+import { SCHEDULE_GROUPS, scheduleMatcher, type ScheduleItem } from "@/lib/campaign-schedule";
 import {
   C, EVENT_LABELS, EVENT_TYPES, WEEK_OPTS, dkey, enrich, sortEv, todayStr, toStamp, toMin, fromMin, isOverdue,
   blankForm, formFromEvent, payloadFromForm, payloadFromEvent, exportCsv, exportIcs,
@@ -25,6 +28,7 @@ import Sidebar from "@/components/calendar/Sidebar";
 import EventDrawer from "@/components/calendar/EventDrawer";
 import EventForm from "@/components/calendar/EventForm";
 import ImportModal, { type ImportPlan } from "@/components/calendar/ImportModal";
+import TodayStrip from "@/components/calendar/TodayStrip";
 
 type View = "month" | "week" | "board" | "list";
 type StatusFilter = PostStatus | "all" | "overdue";
@@ -40,7 +44,7 @@ function scheduleToForm(s: ScheduleItem): FormValues {
   return {
     ...blankForm(s.date, s.type), title: s.title, campaign: s.campaign, tbc: !!s.tbc,
     start: s.start || "09:00", end: s.end || s.start || "09:00",
-    status: s.status || "idea", format: s.format || "", caption: s.caption || "", hashtags: s.hashtags || "",
+    status: s.status || "idea", format: s.format || "", platforms: s.platforms || [], story: !!s.story, caption: s.caption || "", hashtags: s.hashtags || "",
     asset: s.asset || "", needs: s.needs || "", notes: s.notes || "", src: s.src,
   };
 }
@@ -69,6 +73,9 @@ export default function CalendarPage() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<EventType | "all">("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [formatFilter, setFormatFilter] = useState<PostFormat | "all">("all");
+  const [platformFilter, setPlatformFilter] = useState<Platform | "all">("all");
+  const [bannerHidden, setBannerHidden] = useState(false);
   const [form, setForm] = useState<{ mode: "create" | "edit"; id?: string; values: FormValues } | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -82,18 +89,27 @@ export default function CalendarPage() {
   const byId = useMemo(() => new Map(all.map((e) => [e.id, e])), [all]);
   const detail = detailId ? byId.get(detailId) || null : null;
 
-  const filtersActive = !!search || typeFilter !== "all" || statusFilter !== "all" || hidden.length > 0 || hideNoCampaign;
+  // Planned schedule rows (e.g. the fashionABLE social schedule) that aren't in the calendar yet.
+  const missing = useMemo(() => {
+    const match = scheduleMatcher(all);
+    return SCHEDULE_GROUPS.map((g) => ({ label: g.label, n: g.items.filter((s) => !match(s)).length })).filter((g) => g.n > 0);
+  }, [all]);
+  const missingTotal = missing.reduce((n, g) => n + g.n, 0);
+
+  const filtersActive = !!search || typeFilter !== "all" || statusFilter !== "all" || formatFilter !== "all" || platformFilter !== "all" || hidden.length > 0 || hideNoCampaign;
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return all.filter((e) => {
       if (e.meta.campaign ? hidden.includes(e.meta.campaign) : hideNoCampaign) return false;
-      if (q && !`${e.title} ${e.body} ${e.meta.caption || ""} ${e.meta.needs || ""}`.toLowerCase().includes(q)) return false;
+      if (q && !`${e.title} ${e.body} ${e.meta.caption || ""} ${e.meta.hashtags || ""} ${e.meta.needs || ""} ${e.meta.asset || ""}`.toLowerCase().includes(q)) return false;
       if (typeFilter !== "all" && e.type !== typeFilter) return false;
+      if (formatFilter !== "all" && (e.meta.format !== formatFilter && !(formatFilter === "Story" && e.meta.story))) return false;
+      if (platformFilter !== "all" && !e.meta.platforms?.includes(platformFilter)) return false;
       if (statusFilter === "overdue") return isOverdue(e, today);
       if (statusFilter !== "all" && (e.meta.status || (e.type === "Post" ? "idea" : "")) !== statusFilter) return false;
       return true;
     });
-  }, [all, search, typeFilter, statusFilter, hidden, hideNoCampaign, today]);
+  }, [all, search, typeFilter, statusFilter, formatFilter, platformFilter, hidden, hideNoCampaign, today]);
   const byDate = useMemo(() => {
     const m = new Map<string, Ev[]>();
     filtered.forEach((e) => { const l = m.get(e.date); if (l) l.push(e); else m.set(e.date, [e]); });
@@ -248,8 +264,8 @@ export default function CalendarPage() {
   const exportSet = view === "month"
     ? filtered.filter((e) => e.date >= dkey(startOfMonth(cursor)) && e.date <= dkey(endOfMonth(cursor)))
     : filtered;
-  const filterCount = (typeFilter !== "all" ? 1 : 0) + (statusFilter !== "all" ? 1 : 0);
-  const clearFilters = () => { setSearch(""); setTypeFilter("all"); setStatusFilter("all"); setHidden([]); setHideNoCampaign(false); };
+  const filterCount = [typeFilter, statusFilter, formatFilter, platformFilter].filter((f) => f !== "all").length;
+  const clearFilters = () => { setSearch(""); setTypeFilter("all"); setStatusFilter("all"); setFormatFilter("all"); setPlatformFilter("all"); setHidden([]); setHideNoCampaign(false); };
 
   return (
     <DndProvider backend={HTML5Backend}>
@@ -319,7 +335,7 @@ export default function CalendarPage() {
             ) : <span className="absolute right-2.5 top-1/2 -translate-y-1/2 hidden md:inline"><Kbd>/</Kbd></span>}
           </div>
 
-          <Popover align="right" width={260} trigger={(open, toggle) => (
+          <Popover align="right" width={300} trigger={(open, toggle) => (
             <button type="button" onClick={toggle} aria-expanded={open} className="h-9 px-3 rounded-xl border bg-white text-[13px] font-medium inline-flex items-center gap-1.5 hover:bg-stone-50"
               style={{ borderColor: filterCount ? C.accent : C.line, color: filterCount ? C.accentInk : C.ink }}>
               <SlidersHorizontal className="w-4 h-4" /> Filter{filterCount ? ` (${filterCount})` : ""}
@@ -334,6 +350,28 @@ export default function CalendarPage() {
                       <button key={t} type="button" onClick={() => setTypeFilter(t)} className="px-2.5 py-1 rounded-lg text-[12.5px] border"
                         style={{ borderColor: typeFilter === t ? C.ink : C.line, background: typeFilter === t ? C.ink : "white", color: typeFilter === t ? "white" : C.sub }}>
                         {t === "all" ? "All" : EVENT_LABELS[t]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[12px] font-medium mb-1.5" style={{ color: C.sub }}>Format</p>
+                  <div className="flex flex-wrap gap-1">
+                    {(["all", ...FORMATS] as const).map((f) => (
+                      <button key={f} type="button" onClick={() => setFormatFilter(f)} className="px-2.5 py-1 rounded-lg text-[12.5px] border"
+                        style={{ borderColor: formatFilter === f ? C.ink : C.line, background: formatFilter === f ? C.ink : "white", color: formatFilter === f ? "white" : C.sub }}>
+                        {f === "all" ? "All" : f}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[12px] font-medium mb-1.5" style={{ color: C.sub }}>Platform</p>
+                  <div className="flex flex-wrap gap-1">
+                    {(["all", ...PLATFORM_IDS] as const).map((p) => (
+                      <button key={p} type="button" onClick={() => setPlatformFilter(p)} className="px-2.5 py-1 rounded-lg text-[12.5px] border"
+                        style={{ borderColor: platformFilter === p ? C.ink : C.line, background: platformFilter === p ? C.ink : "white", color: platformFilter === p ? "white" : C.sub }}>
+                        {p === "all" ? "All" : PLATFORMS[p].label}
                       </button>
                     ))}
                   </div>
@@ -370,6 +408,8 @@ export default function CalendarPage() {
             <span>Showing {filtered.length} of {all.length}</span>
             {hidden.length > 0 && <span className="px-2 py-0.5 rounded-full bg-white border" style={{ borderColor: C.line }}>{hidden.length} campaign{hidden.length > 1 ? "s" : ""} hidden</span>}
             {typeFilter !== "all" && <span className="px-2 py-0.5 rounded-full bg-white border" style={{ borderColor: C.line }}>{EVENT_LABELS[typeFilter]}s</span>}
+            {formatFilter !== "all" && <span className="px-2 py-0.5 rounded-full bg-white border" style={{ borderColor: C.line }}>{formatFilter}</span>}
+            {platformFilter !== "all" && <span className="px-2 py-0.5 rounded-full bg-white border" style={{ borderColor: C.line }}>{PLATFORMS[platformFilter].label}</span>}
             {statusFilter !== "all" && <span className="px-2 py-0.5 rounded-full bg-white border" style={{ borderColor: C.line }}>{statusFilter === "overdue" ? "Overdue" : STATUSES[statusFilter].label}</span>}
             {search && <span className="px-2 py-0.5 rounded-full bg-white border" style={{ borderColor: C.line }}>&ldquo;{search}&rdquo;</span>}
             <button type="button" onClick={clearFilters} className="font-medium underline underline-offset-2" style={{ color: C.accentInk }}>Clear</button>
@@ -387,6 +427,17 @@ export default function CalendarPage() {
                 <button type="button" onClick={() => setImportOpen(true)} className="h-9 px-4 rounded-xl text-[13px] font-semibold text-white" style={{ background: C.accent }}>Import schedules</button>
               </div>
             )}
+            {all.length > 0 && missingTotal > 0 && !bannerHidden && (
+              <div className="mb-4 rounded-2xl border px-4 py-3 flex flex-wrap items-center gap-3" style={{ borderColor: "#F5D27A", background: "#FFFBEB" }}>
+                <p className="flex-1 min-w-[220px] text-[13px]" style={{ color: C.ink }}>
+                  <b className="font-semibold">{missingTotal} planned item{missingTotal === 1 ? " isn't" : "s aren't"} in the calendar yet</b>
+                  <span style={{ color: C.sub }}> · {missing.map((g) => `${g.n} from ${g.label}`).join(", ")}</span>
+                </p>
+                <button type="button" onClick={() => setImportOpen(true)} className="h-8 px-3.5 rounded-xl text-[13px] font-semibold text-white" style={{ background: C.accent }}>Review and add</button>
+                <button type="button" onClick={() => setBannerHidden(true)} aria-label="Dismiss" className="p-1 rounded-lg hover:bg-amber-100"><X className="w-4 h-4" style={{ color: C.sub }} /></button>
+              </div>
+            )}
+            {view !== "board" && <TodayStrip all={all} today={today} onOpen={(e) => setDetailId(e.id)} onPosted={(id) => setStatus([id], "posted")} />}
             {view === "month" && <MonthView cursor={cursor} byDate={byDate} today={today} onOpen={(e) => setDetailId(e.id)} onCreate={(d) => openCreate(d, "Post")} onDrop={(id, d) => moveEvent(id, d)} />}
             {view === "week" && <WeekView cursor={cursor} byDate={byDate} today={today} onOpen={(e) => setDetailId(e.id)} onCreate={(d, s) => openCreate(d, s ? "Other" : "Post", s)} onDrop={moveEvent} />}
             {view === "board" && <BoardView events={filtered} today={today} onOpen={(e) => setDetailId(e.id)} onStatus={(id, s) => setStatus([id], s)} onCreate={(s) => openCreate(undefined, "Post", undefined, s)} />}
