@@ -13,7 +13,7 @@ import {
   buildDescription, STATUSES, STATUS_IDS, FORMATS, PLATFORMS, PLATFORM_IDS,
   type CampaignId, type EventMeta, type Platform, type PostFormat, type PostStatus,
 } from "@/lib/calendar-meta";
-import { SCHEDULE_GROUPS, scheduleMatcher, type ScheduleItem } from "@/lib/campaign-schedule";
+import { SCHEDULE_GROUPS, RETIRED_SRCS, scheduleMatcher, type ScheduleItem } from "@/lib/campaign-schedule";
 import {
   C, EVENT_LABELS, EVENT_TYPES, WEEK_OPTS, dkey, enrich, sortEv, todayStr, toStamp, toMin, fromMin, isOverdue,
   blankForm, formFromEvent, payloadFromForm, payloadFromEvent, exportCsv, exportIcs,
@@ -98,7 +98,9 @@ export default function CalendarPage() {
   // Planned schedule rows (e.g. the fashionABLE social schedule) that aren't in the calendar yet.
   const missing = useMemo(() => {
     const match = scheduleMatcher(all);
-    return SCHEDULE_GROUPS.map((g) => ({ label: g.label, n: g.items.filter((s) => !match(s)).length })).filter((g) => g.n > 0);
+    const groups = SCHEDULE_GROUPS.map((g) => { const n = g.items.filter((s) => !match(s)).length; return { n, text: `${n} new from ${g.label}` }; }).filter((g) => g.n > 0);
+    const retired = all.filter((e) => RETIRED_SRCS.some((r) => r.src === e.meta.src)).length;
+    return retired ? [...groups, { n: retired, text: `${retired} replaced, to remove` }] : groups;
   }, [all]);
   const missingTotal = missing.reduce((n, g) => n + g.n, 0);
 
@@ -287,7 +289,7 @@ export default function CalendarPage() {
     } catch { addToast("Couldn't delete that", "error"); }
   };
 
-  const runImport = async ({ create, update }: ImportPlan) => {
+  const runImport = async ({ create, update, remove }: ImportPlan) => {
     let ok = 0;
     for (const s of create) { try { await addEvent(payloadFromForm(scheduleToForm(s))); ok++; } catch { /* continue */ } }
     for (const { id, item } of update) {
@@ -297,8 +299,9 @@ export default function CalendarPage() {
       const merged = { ...f, owner: cur.owner || "", cover: cur.cover || "", postUrl: cur.postUrl || "", results: cur.results, platforms: cur.platforms?.length ? cur.platforms : f.platforms };
       try { await updateEvent(id, payloadFromForm(merged)); ok++; } catch { /* continue */ }
     }
-    const total = create.length + update.length;
-    addToast(ok === total ? `Imported ${ok} items` : `Imported ${ok} of ${total}. Try again for the rest.`, ok === total ? "success" : "error");
+    for (const id of remove) { try { await deleteEvent(id); ok++; } catch { /* continue */ } }
+    const total = create.length + update.length + remove.length;
+    addToast(ok === total ? `Calendar updated (${ok} changes)` : `Made ${ok} of ${total} changes. Try again for the rest.`, ok === total ? "success" : "error");
     setImportOpen(false);
   };
 
@@ -492,8 +495,8 @@ export default function CalendarPage() {
             {all.length > 0 && missingTotal > 0 && !bannerHidden && (
               <div className="mb-4 rounded-2xl border px-4 py-3 flex flex-wrap items-center gap-3" style={{ borderColor: "#F5D27A", background: "#FFFBEB" }}>
                 <p className="flex-1 min-w-[220px] text-[13px]" style={{ color: C.ink }}>
-                  <b className="font-semibold">{missingTotal} planned item{missingTotal === 1 ? " isn't" : "s aren't"} in the calendar yet</b>
-                  <span style={{ color: C.sub }}> · {missing.map((g) => `${g.n} from ${g.label}`).join(", ")}</span>
+                  <b className="font-semibold">The plan has {missingTotal} update{missingTotal === 1 ? "" : "s"} for your calendar</b>
+                  <span style={{ color: C.sub }}> · {missing.map((g) => g.text).join(", ")}</span>
                 </p>
                 <button type="button" onClick={() => setImportOpen(true)} className="h-8 px-3.5 rounded-xl text-[13px] font-semibold text-white" style={{ background: C.accent }}>Review and add</button>
                 <button type="button" onClick={() => setBannerHidden(true)} aria-label="Dismiss" className="p-1 rounded-lg hover:bg-amber-100"><X className="w-4 h-4" style={{ color: C.sub }} /></button>

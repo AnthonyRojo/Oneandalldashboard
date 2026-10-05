@@ -86,10 +86,6 @@ export const HUB_AFTER_HOURS: ScheduleItem[] = [
     caption: "What actually happens at Art: Me Time? Swipe 👉 Breathe. Settle. Imagine. Create. No art experience needed.",
     hashtags: ART_TAGS,
   }),
-  hah("05", "2026-10-20", "Story: next session + booking link", "Story", "waiting", {
-    notes: "Date, time, venue and a Humanitix link sticker. Add a countdown sticker.",
-    needs: NEED_DATE,
-  }),
   hah("06", "2026-10-22", "Quote card: \"How I felt after\"", "Static", "waiting", {
     notes: "One line from someone who came to a session, with first name only.",
     needs: "A real quote + written consent",
@@ -111,15 +107,11 @@ export const HUB_AFTER_HOURS: ScheduleItem[] = [
   }),
   hah("11", "2026-11-10", "Hub Letter feature: Hub After Hours", "EDM", "idea", {
     notes: "Short feature in the Hub Letter EDM with photos and the booking link. Same EDM as the fashionABLE feature.",
-    needs: NEED_DATE, hashtags: "",
+    needs: "Humanitix link for the Art: Me Time series", hashtags: "",
   }),
   hah("12", "2026-11-12", "Static: bring a friend", "Static", "idea", {
     notes: "\"Better with a friend\" post with a tag prompt.",
     caption: "Tag the friend who needs a night off 👇 Hub After Hours, Randwick. Book on Humanitix, link in bio.",
-  }),
-  hah("13", "2026-11-17", "Story: last session before the show", "Story", "waiting", {
-    notes: "Light reminder only, since fashionABLE takes over socials in show week.",
-    needs: NEED_DATE,
   }),
   hah("14", "2026-12-01", "Reel: wind down the year", "Reel", "waiting", {
     notes: "End-of-year session promo, using the recap's calm shots.",
@@ -132,6 +124,74 @@ export const HUB_AFTER_HOURS: ScheduleItem[] = [
     notes: "Best photos from the term and a thank-you to everyone who came.",
     needs: "Photos with consent",
   }),
+];
+
+// ── Wednesdays Art: Me Time with Jenni Boehm (poster: "Chakra clearing workshops")
+// Opening event 30 Sep, then one chakra a week, Wednesdays 6pm, 7 Oct – 18 Nov.
+// Each workshop gets 3 posts before it: a Sunday feed post (also shared to stories;
+// Sundays are clear of fashionABLE Mon/Wed/Fri and After Hours Tue/Thu feed posts),
+// a Tuesday "tomorrow" story and a Wednesday "tonight" story.
+const AMT_POSTER = "Wednesdays Art: Me Time poster (chakra illustrations)";
+const JENNI = "Holistic Art Therapist Jenni Boehm (@jenniestherboehm)";
+const CHAKRAS: { key: string; name: string; date: string; promo: string; emoji: string; blurb: string }[] = [
+  { key: "root", name: "Root", date: "2026-10-07", promo: "2026-10-05", emoji: "❤️", blurb: "Grounding, safety and belonging: a gentle space to reconnect with your body and feel supported." },
+  { key: "sacral", name: "Sacral", date: "2026-10-14", promo: "2026-10-11", emoji: "🧡", blurb: "Creativity, pleasure and emotional flow. Explore colour, movement and intuitive expression." },
+  { key: "solar", name: "Solar Plexus", date: "2026-10-21", promo: "2026-10-18", emoji: "💛", blurb: "Confidence, personal power and purpose. Create space for courage, clarity and faith." },
+  { key: "heart", name: "Heart", date: "2026-10-28", promo: "2026-10-25", emoji: "💚", blurb: "Compassion, connection and tenderness. Come back to kindness for yourself and others." },
+  { key: "throat", name: "Throat", date: "2026-11-04", promo: "2026-11-01", emoji: "🩵", blurb: "Expression, listening and authentic voice. Explore what wants to be spoken, heard or created." },
+  { key: "third-eye", name: "Third Eye", date: "2026-11-11", promo: "2026-11-08", emoji: "💜", blurb: "Intuition, insight and inner vision. Slow down and notice what is quietly guiding you." },
+  { key: "crown", name: "Crown", date: "2026-11-18", promo: "2026-11-15", emoji: "🤍", blurb: "Stillness, meaning and connection. Make room for reflection, spaciousness and simply being." },
+];
+const dayBefore = (d: string) => { const t = new Date(`${d}T00:00:00Z`); t.setUTCDate(t.getUTCDate() - 1); return t.toISOString().slice(0, 10); };
+
+export const ART_ME_TIME: ScheduleItem[] = [
+  {
+    src: "amt-opening", title: "Art: Me Time opening event (with Jenni Boehm)", date: "2026-09-30", start: "18:00", end: "20:00",
+    type: "Other", campaign: "hub-after-hours",
+    notes: `Opening of the Wednesdays Art: Me Time workshop series with ${JENNI}. ${VENUE}.`,
+  },
+  ...CHAKRAS.flatMap((c, i): ScheduleItem[] => {
+    const last = i === CHAKRAS.length - 1;
+    const first = i === 0;
+    const when = `Wednesday ${new Date(`${c.date}T00:00:00Z`).toLocaleDateString("en-AU", { day: "numeric", month: "long", timeZone: "UTC" })}, 6pm`;
+    return [
+      {
+        src: `amt-${c.key}`, title: `Art: Me Time: ${c.name} chakra`, date: c.date, start: "18:00", end: "20:00",
+        type: "Other", campaign: "hub-after-hours",
+        notes: `Chakra clearing workshop ${i + 1} of 7 with ${JENNI}. ${c.blurb} ${VENUE}.`,
+        needs: "Confirm finish time (set to 8pm like past sessions)",
+      },
+      {
+        src: `amt-${c.key}-promo`, date: c.promo, type: "Post", campaign: "hub-after-hours",
+        title: first ? "Series launch: 7 Wednesdays, 7 chakras (Root this week)" : `This Wednesday: ${c.name} chakra`,
+        format: first ? "Carousel" : "Static", status: "in-progress", tbc: true, story: true, asset: AMT_POSTER,
+        notes: first
+          ? "Slide 1: series title + Jenni. Slides 2–8: one chakra each with its date and illustration. Last slide: booking. Goes up 2 days before Root, since the Sunday has passed."
+          : `${c.name} chakra card: illustration from the poster, date, 6pm, one line from the description, booking.${last ? " Last workshop in the series, so say so." : ""}`,
+        needs: "Chakra card design from the poster",
+        caption: first
+          ? `Wednesdays are for you 🎨 Art: Me Time is back as a 7-week chakra clearing series with ${JENNI}.\n\nOne chakra a week, every Wednesday at 6pm from 7 October to 18 November. Swipe to find yours 👉\n\nWe start this Wednesday with the Root chakra ${c.emoji} ${c.blurb}\n\nNo art experience needed. Book on Humanitix, link in bio.`
+          : `This Wednesday: ${c.name} chakra ${c.emoji}\n\n${c.blurb}\n\nArt: Me Time with ${JENNI}, ${when}. ${last ? "The last workshop in the series. " : ""}No art experience needed. Book on Humanitix, link in bio.`,
+        hashtags: ART_TAGS,
+      },
+      {
+        src: `amt-${c.key}-tmrw`, date: dayBefore(c.date), type: "Post", campaign: "hub-after-hours",
+        title: `Story: tomorrow 6pm, ${c.name} chakra`, format: "Story", status: "idea", tbc: true, asset: AMT_POSTER,
+        notes: "Chakra card + Humanitix link sticker + countdown sticker.",
+      },
+      {
+        src: `amt-${c.key}-tonight`, date: c.date, type: "Post", campaign: "hub-after-hours",
+        title: `Story: tonight 6pm, ${c.name} chakra`, format: "Story", status: "idea", tbc: true,
+        notes: "Morning reminder with the link sticker. Later: a short clip of the room being set up.",
+      },
+    ];
+  }),
+];
+
+/** Rows that used to be in a plan and have been replaced. Import offers to remove them. */
+export const RETIRED_SRCS: { src: string; why: string }[] = [
+  { src: "hah-05", why: "Replaced by the Art: Me Time 'tomorrow' story for Solar Plexus" },
+  { src: "hah-13", why: "Replaced by the Art: Me Time 'tomorrow' story for Crown" },
 ];
 
 export const FASHIONABLE: ScheduleItem[] = [
@@ -187,7 +247,7 @@ const withDefaults = (s: ScheduleItem): ScheduleItem => s.type !== "Post" ? s : 
 };
 
 export const SCHEDULE_GROUPS: { id: CampaignId; label: string; blurb: string; items: ScheduleItem[] }[] = [
-  { id: "hub-after-hours", label: "Hub After Hours", blurb: "Sessions, Open Day and a Tue/Thu promo plan to mid-December", items: HUB_AFTER_HOURS.map(withDefaults) },
+  { id: "hub-after-hours", label: "Hub After Hours", blurb: "Sessions, Open Day, the Wednesdays Art: Me Time chakra series (3 posts per workshop) and a Tue/Thu promo plan", items: [...HUB_AFTER_HOURS, ...ART_ME_TIME].map(withDefaults).sort((a, b) => a.date.localeCompare(b.date)) },
   { id: "fashionable", label: "fashionABLE Show", blurb: "The show plus all 31 posts from the social schedule", items: FASHIONABLE.map(withDefaults) },
 ];
 
