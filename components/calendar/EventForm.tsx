@@ -11,6 +11,7 @@ import {
 } from "@/lib/calendar-meta";
 import { C, EVENT_COLORS, EVENT_ICONS, EVENT_LABELS, EVENT_TYPES, FORMAT_ICONS, addMinutes, toMin, hashtagCount, type FormValues } from "./utils";
 import { Drawer, CloseButton, Kbd, OwnerSelect, usePeople } from "./ui";
+import CoverInput from "./CoverInput";
 
 interface Props {
   mode: "create" | "edit";
@@ -264,10 +265,7 @@ export default function EventForm({ mode, initial, onCancel, onSave, onDelete }:
               <input id="oa-asset" value={v.asset} onChange={(e) => set({ asset: e.target.value })} className={input} style={{ borderColor: C.line }} placeholder="File name, Figma frame or Canva design" />
             </div>
             {isPost && (
-              <div>
-                <label className={label} style={{ color: C.sub }} htmlFor="oa-cover">Cover image link <span style={{ color: C.faint }}>(optional, shows in Grid view)</span></label>
-                <input id="oa-cover" type="url" value={v.cover} onChange={(e) => set({ cover: e.target.value })} className={input} style={{ borderColor: C.line }} placeholder="https://… link to a .jpg or .png" />
-              </div>
+              <CoverInput value={v.cover} onChange={(cover) => set({ cover })} />
             )}
             {isPost && v.status === "posted" && (
               <div>

@@ -209,10 +209,15 @@ function IgPreview({ e }: { e: Ev }) {
         <span className="w-7 h-7 rounded-full flex-shrink-0" style={{ background: "conic-gradient(#FFD734, #E83686, #FFD734)", padding: 2 }}><span className="block w-full h-full rounded-full bg-white" /></span>
         <span className="font-semibold text-[12.5px]">One &amp; All Hub</span>
       </div>
-      <div className="aspect-square flex flex-col items-center justify-center gap-1.5 text-[12px]" style={{ background: `${e.color}14`, color: e.color }}>
-        <FormatIcon format={e.meta.format} className="w-6 h-6" />
-        <span className="font-medium px-6 text-center">{e.meta.asset || e.title}</span>
-      </div>
+      {e.meta.cover ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={e.meta.cover} alt="" className="w-full object-cover" style={{ aspectRatio: "4 / 5" }} />
+      ) : (
+        <div className="aspect-square flex flex-col items-center justify-center gap-1.5 text-[12px]" style={{ background: `${e.color}14`, color: e.color }}>
+          <FormatIcon format={e.meta.format} className="w-6 h-6" />
+          <span className="font-medium px-6 text-center">{e.meta.asset || e.title}</span>
+        </div>
+      )}
       <div className="flex items-center gap-3 px-3 pt-2.5" aria-hidden><Heart className="w-5 h-5" /><MessageCircle className="w-5 h-5" /><Send className="w-5 h-5" /><Bookmark className="w-5 h-5 ml-auto" /></div>
       <p className="px-3 pt-2 pb-3 leading-snug whitespace-pre-wrap">
         <span className="font-semibold">One &amp; All Hub</span>{" "}
