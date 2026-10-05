@@ -1,4 +1,4 @@
-// Calendar metadata (campaign, status, format, time-TBC) for events.
+// Calendar metadata (campaign, status, format, caption…) for events.
 //
 // The `events` table has no columns for these, so they ride along at the end of
 // the description as a hidden marker:  <!--oa:{"campaign":"fashionable",...}-->
@@ -7,34 +7,48 @@
 
 export type CampaignId = "fashionable" | "hub-after-hours" | "gifts4good" | "general";
 export type PostStatus = "idea" | "in-progress" | "waiting" | "ready" | "posted";
-export type PostFormat = "Reel" | "Carousel" | "Static" | "Story" | "EDM" | "Other";
+export type PostFormat = "Reel" | "Carousel" | "Static" | "Story" | "Video" | "EDM" | "Other";
 
 export interface EventMeta {
   campaign?: CampaignId;
   status?: PostStatus;
   format?: PostFormat;
-  /** Time not confirmed yet — UI shows "Time TBC" instead of a clock time. */
+  /** Time not confirmed yet — UI shows "No set time" instead of a clock time. */
   tbc?: boolean;
+  caption?: string;
+  hashtags?: string;
+  /** Where the asset lives (file name, Figma frame, Canva link…) */
+  asset?: string;
+  /** What's blocking it (consent, footage, quote…) */
+  needs?: string;
+  /** Stable id for items that came from an imported schedule */
+  src?: string;
 }
 
-export const CAMPAIGNS: Record<CampaignId, { label: string; short: string; color: string }> = {
-  fashionable: { label: "fashionABLE Show", short: "fashionABLE", color: "#E83686" },
-  "hub-after-hours": { label: "Hub After Hours", short: "After Hours", color: "#6D28D9" },
-  gifts4good: { label: "Gifts4Good", short: "Gifts4Good", color: "#059669" },
-  general: { label: "General", short: "General", color: "#F59E0B" },
+export const CAMPAIGNS: Record<CampaignId, { label: string; short: string; color: string; date?: string; dateLabel?: string }> = {
+  fashionable: { label: "fashionABLE Show", short: "fashionABLE", color: "#E83686", date: "2026-11-26", dateLabel: "show" },
+  "hub-after-hours": { label: "Hub After Hours", short: "After Hours", color: "#2F7A7E" },
+  gifts4good: { label: "Gifts4Good", short: "Gifts4Good", color: "#C2611F" },
+  general: { label: "General", short: "General", color: "#78716C" },
 };
 export const CAMPAIGN_IDS = Object.keys(CAMPAIGNS) as CampaignId[];
 
-export const STATUSES: Record<PostStatus, { label: string; color: string; bg: string }> = {
-  idea: { label: "Idea", color: "#6b7280", bg: "#f3f4f6" },
-  "in-progress": { label: "In progress", color: "#2563eb", bg: "#eff6ff" },
-  waiting: { label: "Waiting on", color: "#b45309", bg: "#fffbeb" },
-  ready: { label: "Ready", color: "#7c3aed", bg: "#f5f3ff" },
-  posted: { label: "Posted", color: "#15803d", bg: "#f0fdf4" },
+export const STATUSES: Record<PostStatus, { label: string; color: string; bg: string; hint: string }> = {
+  idea: { label: "Idea", color: "#57534E", bg: "#F1F0EC", hint: "Not started" },
+  "in-progress": { label: "In progress", color: "#1D4ED8", bg: "#EEF3FF", hint: "Being filmed or made" },
+  waiting: { label: "Waiting on", color: "#A15C07", bg: "#FFF6E0", hint: "Blocked by consent, footage, a quote…" },
+  ready: { label: "Ready", color: "#6D28D9", bg: "#F4EFFF", hint: "Made and approved, not posted yet" },
+  posted: { label: "Posted", color: "#15803D", bg: "#EDFAF1", hint: "Live" },
 };
 export const STATUS_IDS = Object.keys(STATUSES) as PostStatus[];
 
-export const FORMATS: PostFormat[] = ["Reel", "Carousel", "Static", "Story", "EDM", "Other"];
+export const FORMATS: PostFormat[] = ["Reel", "Carousel", "Static", "Story", "Video", "EDM", "Other"];
+
+export const LOCKED_HASHTAGS = "#OneAndAll #SydneyNDIS #Randwick";
+export const CAMPAIGN_HASHTAGS: Partial<Record<CampaignId, string>> = {
+  fashionable: "#fashionABLE",
+  "hub-after-hours": "#HubAfterHours",
+};
 
 const META_RE = /\s*<!--oa:(\{[\s\S]*?\})-->\s*$/;
 
@@ -51,12 +65,15 @@ export function parseEventMeta(description?: string | null): { body: string; met
 }
 
 export function buildDescription(body: string, meta: EventMeta): string {
-  const clean: EventMeta = {};
-  if (meta.campaign) clean.campaign = meta.campaign;
-  if (meta.status) clean.status = meta.status;
-  if (meta.format) clean.format = meta.format;
-  if (meta.tbc) clean.tbc = true;
+  const clean: Record<string, unknown> = {};
+  (Object.keys(meta) as (keyof EventMeta)[]).forEach((k) => {
+    const v = meta[k];
+    if (v === undefined || v === null || v === "" || v === false) return;
+    clean[k] = typeof v === "string" ? v.trim() : v;
+  });
   const text = (body || "").replace(META_RE, "").trimEnd();
   if (Object.keys(clean).length === 0) return text;
-  return `${text}${text ? "\n\n" : ""}<!--oa:${JSON.stringify(clean)}-->`;
+  // Escape ">" so a value can never close the HTML comment early.
+  const json = JSON.stringify(clean).replace(/>/g, "\\u003e");
+  return `${text}${text ? "\n\n" : ""}<!--oa:${json}-->`;
 }
