@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { useApp } from "@/context/AppContext";
 import { TrendingUp, Users, CheckCircle, Calendar, Activity, ChevronRight } from "lucide-react";
+import SocialAnalytics from "@/components/calendar/SocialAnalytics";
 
 export default function AnalyticsPage() {
   const { currentTasks, currentMembers, currentEvents, currentActivities, currentTeam } = useApp();
@@ -81,6 +82,8 @@ export default function AnalyticsPage() {
           </div>
         ))}
       </div>
+
+      <SocialAnalytics events={currentEvents} members={currentMembers} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <div className="p-6 rounded-2xl border" style={{ background: "white", borderColor: "#e5e7eb" }}>

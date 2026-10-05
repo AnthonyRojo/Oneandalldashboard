@@ -6,12 +6,12 @@ import { HTML5Backend } from "react-dnd-html5-backend";
 import { format, parseISO, startOfWeek, endOfWeek, addMonths, subMonths, addWeeks, subWeeks, addDays, startOfMonth, endOfMonth, isSameMonth } from "date-fns";
 import {
   ChevronLeft, ChevronRight, Plus, Search, Download, Upload, SlidersHorizontal, ChevronDown,
-  CalendarRange, Columns3, KanbanSquare, List, X, Check, Keyboard,
+  CalendarRange, Columns3, KanbanSquare, List, X, Check, Keyboard, LayoutGrid,
 } from "lucide-react";
 import { useApp, type EventType } from "@/context/AppContext";
 import {
   buildDescription, STATUSES, STATUS_IDS, FORMATS, PLATFORMS, PLATFORM_IDS,
-  type CampaignId, type Platform, type PostFormat, type PostStatus,
+  type CampaignId, type EventMeta, type Platform, type PostFormat, type PostStatus,
 } from "@/lib/calendar-meta";
 import { SCHEDULE_GROUPS, scheduleMatcher, type ScheduleItem } from "@/lib/campaign-schedule";
 import {
@@ -19,7 +19,8 @@ import {
   blankForm, formFromEvent, payloadFromForm, payloadFromEvent, exportCsv, exportIcs,
   type Ev, type FormValues, type EventPayload,
 } from "@/components/calendar/utils";
-import { Popover, MenuItem, Kbd } from "@/components/calendar/ui";
+import { Popover, MenuItem, Kbd, PeopleContext, type Person } from "@/components/calendar/ui";
+import GridView from "@/components/calendar/GridView";
 import MonthView from "@/components/calendar/MonthView";
 import WeekView from "@/components/calendar/WeekView";
 import BoardView from "@/components/calendar/BoardView";
@@ -30,12 +31,13 @@ import EventForm from "@/components/calendar/EventForm";
 import ImportModal, { type ImportPlan } from "@/components/calendar/ImportModal";
 import TodayStrip from "@/components/calendar/TodayStrip";
 
-type View = "month" | "week" | "board" | "list";
+type View = "month" | "week" | "board" | "grid" | "list";
 type StatusFilter = PostStatus | "all" | "overdue";
 const VIEWS: { id: View; label: string; key: string; icon: typeof List }[] = [
   { id: "month", label: "Month", key: "M", icon: CalendarRange },
   { id: "week", label: "Week", key: "W", icon: Columns3 },
   { id: "board", label: "Board", key: "B", icon: KanbanSquare },
+  { id: "grid", label: "Grid", key: "G", icon: LayoutGrid },
   { id: "list", label: "List", key: "L", icon: List },
 ];
 const PREFS_KEY = "oa-calendar-prefs-v2";
@@ -50,7 +52,10 @@ function scheduleToForm(s: ScheduleItem): FormValues {
 }
 
 export default function CalendarPage() {
-  const { currentEvents, addEvent, updateEvent, deleteEvent, addToast } = useApp();
+  const { currentEvents, currentMembers, currentUser, addEvent, updateEvent, deleteEvent, addToast } = useApp();
+  const people = useMemo<Person[]>(() => currentMembers.map((m) => ({ id: m.userId || m.id, name: m.name, avatar: m.avatar })), [currentMembers]);
+  const meId = currentUser?.id;
+  const peopleCtx = useMemo(() => ({ people, meId }), [people, meId]);
 
   // ── View state (view + campaign visibility are remembered per browser)
   const [view, setView] = useState<View>("month");
@@ -75,6 +80,7 @@ export default function CalendarPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [formatFilter, setFormatFilter] = useState<PostFormat | "all">("all");
   const [platformFilter, setPlatformFilter] = useState<Platform | "all">("all");
+  const [ownerFilter, setOwnerFilter] = useState<string>("all"); // "all" | "me" | "none" | person id
   const [bannerHidden, setBannerHidden] = useState(false);
   const [form, setForm] = useState<{ mode: "create" | "edit"; id?: string; values: FormValues } | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -96,7 +102,7 @@ export default function CalendarPage() {
   }, [all]);
   const missingTotal = missing.reduce((n, g) => n + g.n, 0);
 
-  const filtersActive = !!search || typeFilter !== "all" || statusFilter !== "all" || formatFilter !== "all" || platformFilter !== "all" || hidden.length > 0 || hideNoCampaign;
+  const filtersActive = !!search || typeFilter !== "all" || statusFilter !== "all" || formatFilter !== "all" || platformFilter !== "all" || ownerFilter !== "all" || hidden.length > 0 || hideNoCampaign;
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return all.filter((e) => {
@@ -105,11 +111,12 @@ export default function CalendarPage() {
       if (typeFilter !== "all" && e.type !== typeFilter) return false;
       if (formatFilter !== "all" && (e.meta.format !== formatFilter && !(formatFilter === "Story" && e.meta.story))) return false;
       if (platformFilter !== "all" && !e.meta.platforms?.includes(platformFilter)) return false;
+      if (ownerFilter === "none" ? !!e.meta.owner : ownerFilter !== "all" && e.meta.owner !== (ownerFilter === "me" ? meId : ownerFilter)) return false;
       if (statusFilter === "overdue") return isOverdue(e, today);
       if (statusFilter !== "all" && (e.meta.status || (e.type === "Post" ? "idea" : "")) !== statusFilter) return false;
       return true;
     });
-  }, [all, search, typeFilter, statusFilter, formatFilter, platformFilter, hidden, hideNoCampaign, today]);
+  }, [all, search, typeFilter, statusFilter, formatFilter, platformFilter, ownerFilter, meId, hidden, hideNoCampaign, today]);
   const byDate = useMemo(() => {
     const m = new Map<string, Ev[]>();
     filtered.forEach((e) => { const l = m.get(e.date); if (l) l.push(e); else m.set(e.date, [e]); });
@@ -138,7 +145,7 @@ export default function CalendarPage() {
   const goPrev = useCallback(() => setCursor((c) => (view === "week" ? subWeeks(c, 1) : subMonths(c, 1))), [view]);
   const goNext = useCallback(() => setCursor((c) => (view === "week" ? addWeeks(c, 1) : addMonths(c, 1))), [view]);
   const goToday = useCallback(() => setCursor(new Date()), []);
-  const jumpTo = useCallback((date: string) => { setCursor(parseISO(date)); if (view === "board" || view === "list") setView("month"); }, [view]);
+  const jumpTo = useCallback((date: string) => { setCursor(parseISO(date)); if (view === "board" || view === "grid" || view === "list") setView("month"); }, [view]);
 
   const openCreate = useCallback((date?: string, type: EventType = "Post", start?: string, status?: PostStatus) => {
     setDetailId(null);
@@ -165,6 +172,7 @@ export default function CalendarPage() {
       else if (k === "m") setView("month");
       else if (k === "w") setView("week");
       else if (k === "b") setView("board");
+      else if (k === "g") setView("grid");
       else if (k === "l") setView("list");
       else if (ev.key === "?") setHelpOpen((o) => !o);
       else if (ev.key === "/") { ev.preventDefault(); searchRef.current?.focus(); }
@@ -239,6 +247,36 @@ export default function CalendarPage() {
     } catch { addToast("Couldn't update status", "error"); }
   }, [byId, updateEvent, offerUndo, addToast]);
 
+  const updateMeta = useCallback(async (ids: string[], patch: Partial<EventMeta>, label: string) => {
+    const evs = ids.map((id) => byId.get(id)).filter(Boolean) as Ev[];
+    if (!evs.length) return;
+    const before = evs.map((e) => [e.id, e.description] as const);
+    try {
+      for (const e of evs) await updateEvent(e.id, { description: buildDescription(e.body, { ...e.meta, ...patch }) });
+      offerUndo(label, async () => { for (const [id, d] of before) await updateEvent(id, { description: d }); });
+    } catch { addToast("Couldn't save that", "error"); }
+  }, [byId, updateEvent, offerUndo, addToast]);
+
+  const assign = (ids: string[], owner: string) => {
+    const who = owner ? (owner === meId ? "you" : people.find((p) => p.id === owner)?.name.split(" ")[0] || "them") : "nobody";
+    return updateMeta(ids, { owner: owner || undefined }, `${ids.length > 1 ? `${ids.length} items` : "Assigned"} ${ids.length > 1 ? "assigned to" : "to"} ${who}`);
+  };
+
+  // Grid view: drop one post on another to trade dates (each keeps its own time).
+  const swapDates = useCallback(async (aId: string, bId: string) => {
+    const a = byId.get(aId); const b = byId.get(bId);
+    if (!a || !b || a.date === b.date) return;
+    const at = (e: Ev, date: string) => {
+      const s = e.meta.tbc ? "09:00" : e.start || "09:00"; const en = e.meta.tbc ? "09:00" : e.end || s;
+      return { date, startTime: toStamp(date, s), endTime: toStamp(date, en) };
+    };
+    const before = [[a.id, snapshot(a)], [b.id, snapshot(b)]] as const;
+    try {
+      await updateEvent(a.id, at(a, b.date)); await updateEvent(b.id, at(b, a.date));
+      offerUndo(`Swapped "${a.title}" and "${b.title}"`, async () => { for (const [id, s] of before) await updateEvent(id, s); });
+    } catch { addToast("Couldn't swap those", "error"); }
+  }, [byId, updateEvent, offerUndo, addToast]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const removeEvents = async (ids: string[]) => {
     const evs = ids.map((id) => byId.get(id)).filter(Boolean) as Ev[];
     setDetailId(null); setForm(null);
@@ -252,7 +290,13 @@ export default function CalendarPage() {
   const runImport = async ({ create, update }: ImportPlan) => {
     let ok = 0;
     for (const s of create) { try { await addEvent(payloadFromForm(scheduleToForm(s))); ok++; } catch { /* continue */ } }
-    for (const { id, item } of update) { try { await updateEvent(id, payloadFromForm(scheduleToForm(item))); ok++; } catch { /* continue */ } }
+    for (const { id, item } of update) {
+      // Refresh the plan's text, but keep what the team has added since (owner, links, results…).
+      const cur = byId.get(id)?.meta || {};
+      const f = scheduleToForm(item);
+      const merged = { ...f, owner: cur.owner || "", cover: cur.cover || "", postUrl: cur.postUrl || "", results: cur.results, platforms: cur.platforms?.length ? cur.platforms : f.platforms };
+      try { await updateEvent(id, payloadFromForm(merged)); ok++; } catch { /* continue */ }
+    }
     const total = create.length + update.length;
     addToast(ok === total ? `Imported ${ok} items` : `Imported ${ok} of ${total}. Try again for the rest.`, ok === total ? "success" : "error");
     setImportOpen(false);
@@ -260,15 +304,16 @@ export default function CalendarPage() {
 
   const rangeLabel = view === "week"
     ? (() => { const s = startOfWeek(cursor, WEEK_OPTS); const e = endOfWeek(cursor, WEEK_OPTS); return s.getMonth() === e.getMonth() ? `${format(s, "d")}–${format(e, "d MMMM yyyy")}` : `${format(s, "d MMM")} – ${format(e, "d MMM yyyy")}`; })()
-    : view === "month" ? format(cursor, "MMMM yyyy") : view === "board" ? "Content board" : "Everything coming up";
+    : view === "month" ? format(cursor, "MMMM yyyy") : view === "board" ? "Content board" : view === "grid" ? "Instagram grid" : "Everything coming up";
   const exportSet = view === "month"
     ? filtered.filter((e) => e.date >= dkey(startOfMonth(cursor)) && e.date <= dkey(endOfMonth(cursor)))
     : filtered;
-  const filterCount = [typeFilter, statusFilter, formatFilter, platformFilter].filter((f) => f !== "all").length;
-  const clearFilters = () => { setSearch(""); setTypeFilter("all"); setStatusFilter("all"); setFormatFilter("all"); setPlatformFilter("all"); setHidden([]); setHideNoCampaign(false); };
+  const filterCount = [typeFilter, statusFilter, formatFilter, platformFilter, ownerFilter].filter((f) => f !== "all").length;
+  const clearFilters = () => { setSearch(""); setTypeFilter("all"); setStatusFilter("all"); setFormatFilter("all"); setPlatformFilter("all"); setOwnerFilter("all"); setHidden([]); setHideNoCampaign(false); };
 
   return (
     <DndProvider backend={HTML5Backend}>
+      <PeopleContext.Provider value={peopleCtx}>
       <div className="p-4 md:p-6 min-h-screen" style={{ background: C.page, color: C.ink }}>
         {/* Header */}
         <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
@@ -355,6 +400,15 @@ export default function CalendarPage() {
                   </div>
                 </div>
                 <div>
+                  <p className="text-[12px] font-medium mb-1.5" style={{ color: C.sub }}>Assigned to</p>
+                  <select value={ownerFilter} onChange={(e) => setOwnerFilter(e.target.value)} className="w-full px-2 py-1.5 rounded-lg border text-[13px] bg-white" style={{ borderColor: C.line }} aria-label="Assigned to">
+                    <option value="all">Anyone</option>
+                    {meId && <option value="me">Me</option>}
+                    <option value="none">Nobody yet</option>
+                    {people.filter((p) => p.id !== meId).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+                <div>
                   <p className="text-[12px] font-medium mb-1.5" style={{ color: C.sub }}>Format</p>
                   <div className="flex flex-wrap gap-1">
                     {(["all", ...FORMATS] as const).map((f) => (
@@ -392,6 +446,13 @@ export default function CalendarPage() {
             )}
           </Popover>
 
+          {meId && (
+            <button type="button" onClick={() => setOwnerFilter((f) => (f === "me" ? "all" : "me"))} aria-pressed={ownerFilter === "me"} title="Only things assigned to me"
+              className="h-9 px-3 rounded-xl border text-[13px] font-medium"
+              style={ownerFilter === "me" ? { background: C.ink, color: "white", borderColor: C.ink } : { background: "white", borderColor: C.line, color: C.ink }}>
+              Mine
+            </button>
+          )}
           <div className="flex rounded-xl p-1 border bg-white" style={{ borderColor: C.line }} role="tablist" aria-label="View">
             {VIEWS.map(({ id, label, key, icon: Icon }) => (
               <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => setView(id)} title={`${label} (${key})`}
@@ -408,6 +469,7 @@ export default function CalendarPage() {
             <span>Showing {filtered.length} of {all.length}</span>
             {hidden.length > 0 && <span className="px-2 py-0.5 rounded-full bg-white border" style={{ borderColor: C.line }}>{hidden.length} campaign{hidden.length > 1 ? "s" : ""} hidden</span>}
             {typeFilter !== "all" && <span className="px-2 py-0.5 rounded-full bg-white border" style={{ borderColor: C.line }}>{EVENT_LABELS[typeFilter]}s</span>}
+            {ownerFilter !== "all" && <span className="px-2 py-0.5 rounded-full bg-white border" style={{ borderColor: C.line }}>{ownerFilter === "me" ? "Mine" : ownerFilter === "none" ? "Unassigned" : people.find((p) => p.id === ownerFilter)?.name || "Assigned"}</span>}
             {formatFilter !== "all" && <span className="px-2 py-0.5 rounded-full bg-white border" style={{ borderColor: C.line }}>{formatFilter}</span>}
             {platformFilter !== "all" && <span className="px-2 py-0.5 rounded-full bg-white border" style={{ borderColor: C.line }}>{PLATFORMS[platformFilter].label}</span>}
             {statusFilter !== "all" && <span className="px-2 py-0.5 rounded-full bg-white border" style={{ borderColor: C.line }}>{statusFilter === "overdue" ? "Overdue" : STATUSES[statusFilter].label}</span>}
@@ -416,7 +478,7 @@ export default function CalendarPage() {
           </div>
         )}
 
-        <div className={`grid grid-cols-1 gap-4 items-start ${view === "board" ? "" : "lg:grid-cols-[minmax(0,1fr)_272px]"}`}>
+        <div className={`grid grid-cols-1 gap-4 items-start ${view === "board" || view === "grid" ? "" : "lg:grid-cols-[minmax(0,1fr)_272px]"}`}>
           <main className="min-w-0 order-1">
             {all.length === 0 && (
               <div className="mb-4 rounded-2xl border bg-white p-5 flex flex-wrap items-center gap-4" style={{ borderColor: C.line }}>
@@ -437,16 +499,17 @@ export default function CalendarPage() {
                 <button type="button" onClick={() => setBannerHidden(true)} aria-label="Dismiss" className="p-1 rounded-lg hover:bg-amber-100"><X className="w-4 h-4" style={{ color: C.sub }} /></button>
               </div>
             )}
-            {view !== "board" && <TodayStrip all={all} today={today} onOpen={(e) => setDetailId(e.id)} onPosted={(id) => setStatus([id], "posted")} />}
+            {view !== "board" && view !== "grid" && <TodayStrip all={all} today={today} onOpen={(e) => setDetailId(e.id)} onPosted={(id) => setStatus([id], "posted")} />}
             {view === "month" && <MonthView cursor={cursor} byDate={byDate} today={today} onOpen={(e) => setDetailId(e.id)} onCreate={(d) => openCreate(d, "Post")} onDrop={(id, d) => moveEvent(id, d)} />}
             {view === "week" && <WeekView cursor={cursor} byDate={byDate} today={today} onOpen={(e) => setDetailId(e.id)} onCreate={(d, s) => openCreate(d, s ? "Other" : "Post", s)} onDrop={moveEvent} />}
             {view === "board" && <BoardView events={filtered} today={today} onOpen={(e) => setDetailId(e.id)} onStatus={(id, s) => setStatus([id], s)} onCreate={(s) => openCreate(undefined, "Post", undefined, s)} />}
+            {view === "grid" && <GridView events={filtered} today={today} onOpen={(e) => setDetailId(e.id)} onSwap={swapDates} />}
             {view === "list" && (
               <ListView events={filtered} today={today} filtersActive={filtersActive} onOpen={(e) => setDetailId(e.id)} onCreate={() => openCreate()}
-                onStatus={(id, s) => setStatus([id], s)} onBulkStatus={setStatus} onBulkShift={shiftEvents} onBulkDelete={removeEvents} />
+                onStatus={(id, s) => setStatus([id], s)} onBulkStatus={setStatus} onBulkShift={shiftEvents} onBulkOwner={assign} onBulkDelete={removeEvents} />
             )}
           </main>
-          <div className={view === "board" ? "hidden" : "order-2"}>
+          <div className={view === "board" || view === "grid" ? "hidden" : "order-2"}>
             <Sidebar all={all} today={today} cursor={cursor} hidden={hidden} hideNoCampaign={hideNoCampaign}
               onToggleCampaign={(c) => setHidden((h) => (h.includes(c) ? h.filter((x) => x !== c) : [...h, c]))}
               onOnlyCampaign={(c) => { setHidden((["fashionable", "hub-after-hours", "gifts4good", "general"] as CampaignId[]).filter((x) => x !== c)); setHideNoCampaign(true); }}
@@ -462,7 +525,8 @@ export default function CalendarPage() {
           <EventDrawer e={detail} onClose={() => setDetailId(null)} onEdit={() => setForm({ mode: "edit", id: detail.id, values: formFromEvent(detail) })}
             onDuplicate={() => { setDetailId(null); setForm({ mode: "create", values: { ...formFromEvent(detail), title: `${detail.title} (copy)`, src: undefined, status: detail.type === "Post" ? "idea" : detail.meta.status || "idea" } }); }}
             onDelete={() => removeEvents([detail.id])} onStatus={(s) => setStatus([detail.id], s)} onShift={(d) => shiftEvents([detail.id], d)}
-            onJump={() => { jumpTo(detail.date); setDetailId(null); }} />
+            onJump={() => { jumpTo(detail.date); setDetailId(null); }}
+            onMeta={(patch) => "owner" in patch && Object.keys(patch).length === 1 ? assign([detail.id], patch.owner || "") : updateMeta([detail.id], patch, "Results saved")} />
         )}
         {form && (
           <EventForm key={form.id || "new"} mode={form.mode} initial={form.values} onCancel={() => setForm(null)} onSave={saveForm}
@@ -479,6 +543,7 @@ export default function CalendarPage() {
           </div>
         )}
       </div>
+      </PeopleContext.Provider>
     </DndProvider>
   );
 }
@@ -486,7 +551,7 @@ export default function CalendarPage() {
 function ShortcutHelp({ onClose }: { onClose: () => void }) {
   const rows: [string, string][] = [
     ["N", "New post"], ["E", "New event"], ["T", "Jump to today"], ["← →", "Previous / next"],
-    ["M W B L", "Month, week, board, list"], ["/", "Search"], ["Esc", "Close a panel"], ["Ctrl Enter", "Save the form"],
+    ["M W B G L", "Month, week, board, grid, list"], ["/", "Search"], ["Esc", "Close a panel"], ["Ctrl Enter", "Save the form"],
   ];
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6" style={{ background: "rgba(24,24,27,.3)" }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>

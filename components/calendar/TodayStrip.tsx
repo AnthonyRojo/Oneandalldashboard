@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { format, parseISO, addDays } from "date-fns";
 import { Check, Copy, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 import { C, dkey, relDay, timeLabel, isOverdue, readiness, type Ev } from "./utils";
-import { CampaignTag, FormatIcon, PlatformBadges, StatusPill } from "./ui";
+import { CampaignTag, FormatIcon, PlatformBadges, StatusPill, OwnerBadge } from "./ui";
 
 interface Props {
   all: Ev[];
@@ -81,6 +81,7 @@ function PostCard({ e, tag, copied, onCopy, onOpen, onPosted }: {
         <span className="inline-flex items-center gap-1"><FormatIcon format={e.meta.format} />{e.meta.format || "Post"}</span>
         <PlatformBadges platforms={e.meta.platforms} story={e.meta.story} />
         <CampaignTag c={e.meta.campaign} />
+        <span className="ml-auto"><OwnerBadge id={e.meta.owner} name /></span>
       </div>
       {e.meta.needs && !posted ? (
         <p className="text-[11px] leading-snug rounded-md px-2 py-1 line-clamp-2" style={{ background: "#FFF6E0", color: "#8A4B06" }}>Needs: {e.meta.needs}</p>

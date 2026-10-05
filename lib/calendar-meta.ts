@@ -28,6 +28,33 @@ export interface EventMeta {
   needs?: string;
   /** Stable id for items that came from an imported schedule */
   src?: string;
+  /** Team member responsible (profile id, i.e. member.userId || member.id) */
+  owner?: string;
+  /** Image URL for the Instagram grid preview (optional) */
+  cover?: string;
+  /** Link to the live post, added once it's up */
+  postUrl?: string;
+  /** Results typed in from Instagram Insights after posting */
+  results?: PostResults;
+}
+
+export interface PostResults {
+  reach?: number;
+  likes?: number;
+  comments?: number;
+  saves?: number;
+  shares?: number;
+  /** yyyy-MM-dd the numbers were read */
+  at?: string;
+}
+export const RESULT_FIELDS: { key: Exclude<keyof PostResults, "at">; label: string }[] = [
+  { key: "reach", label: "Reach" }, { key: "likes", label: "Likes" }, { key: "comments", label: "Comments" },
+  { key: "saves", label: "Saves" }, { key: "shares", label: "Shares" },
+];
+/** Interactions per 100 people reached, or null when there's no reach to divide by. */
+export function engagementRate(r?: PostResults) {
+  if (!r?.reach) return null;
+  return (((r.likes || 0) + (r.comments || 0) + (r.saves || 0) + (r.shares || 0)) / r.reach) * 100;
 }
 
 export const CAMPAIGNS: Record<CampaignId, { label: string; short: string; color: string; date?: string; dateLabel?: string }> = {
