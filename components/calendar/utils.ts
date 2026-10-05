@@ -3,7 +3,7 @@ import type { CalendarEvent, EventType } from "@/context/AppContext";
 import { Video, Eye, FileText, CalendarClock, Clapperboard, GalleryHorizontalEnd, Image, CircleDashed, Mail, Shapes } from "lucide-react";
 import {
   CAMPAIGNS, PLATFORMS, IG, parseEventMeta, buildDescription,
-  type CampaignId, type EventMeta, type Platform, type PostFormat, type PostStatus,
+  type CampaignId, type EventMeta, type Platform, type PostFormat, type PostResults, type PostStatus,
 } from "@/lib/calendar-meta";
 
 export const EVENT_COLORS: Record<EventType, string> = {
@@ -85,6 +85,12 @@ export const isOverdue = (e: Ev, today: string) =>
   e.type === "Post" && !!e.meta.status && e.meta.status !== "posted" && e.date < today;
 export const isPosted = (e: Ev) => e.meta.status === "posted";
 
+/** Shows on the Instagram profile grid (feed formats, IG or no platform set yet). */
+export const onIgGrid = (e: Ev) =>
+  e.type === "Post" && e.meta.format !== "Story" && e.meta.format !== "EDM" && (!e.meta.platforms?.length || e.meta.platforms.includes("instagram"));
+
+export const safeUrl = (u?: string) => (u ? (/^https?:\/\//i.test(u) ? u : `https://${u}`) : "");
+
 /** "52 days to the show" style countdown for posts in a campaign with a key date. */
 export function countdown(e: { date: string; meta: EventMeta }) {
   const k = e.meta.campaign ? CAMPAIGNS[e.meta.campaign] : undefined;
@@ -101,6 +107,7 @@ export function readiness(e: { type: EventType; link?: string; meta: EventMeta }
   if (e.type !== "Post") return null;
   const m = e.meta;
   const checks = [
+    { ok: !!m.owner, label: "Someone assigned" },
     { ok: !!m.format, label: "Format chosen" },
     { ok: !!m.caption?.trim(), label: "Caption written" },
     { ok: hashtagCount(m.hashtags) > 0 && hashtagCount(m.hashtags) <= IG.hashtagMax, label: hashtagCount(m.hashtags) > IG.hashtagMax ? `Too many hashtags (max ${IG.hashtagMax})` : "Hashtags added" },
@@ -132,6 +139,10 @@ export interface FormValues {
   needs: string;
   link: string;
   notes: string;
+  owner: string;
+  cover: string;
+  postUrl: string;
+  results?: PostResults;
   src?: string;
 }
 
@@ -139,7 +150,7 @@ export const blankForm = (date: string, type: EventType = "Post", start?: string
   title: "", type, campaign: "", date,
   start: start || "10:00", end: addMinutes(start || "10:00", 60),
   tbc: type === "Post" && !start, repeatWeeks: 1,
-  status: "idea", format: "", platforms: type === "Post" ? ["instagram"] : [], story: false, caption: "", hashtags: "", asset: "", needs: "", link: "", notes: "",
+  status: "idea", format: "", platforms: type === "Post" ? ["instagram"] : [], story: false, caption: "", hashtags: "", asset: "", needs: "", link: "", notes: "", owner: "", cover: "", postUrl: "",
 });
 
 export const formFromEvent = (e: Ev): FormValues => ({
@@ -147,7 +158,7 @@ export const formFromEvent = (e: Ev): FormValues => ({
   start: e.start || "10:00", end: e.end || e.start || "11:00", tbc: !!e.meta.tbc, repeatWeeks: 1,
   status: e.meta.status || "idea", format: e.meta.format || "", platforms: e.meta.platforms || [], story: !!e.meta.story,
   caption: e.meta.caption || "", hashtags: e.meta.hashtags || "", asset: e.meta.asset || "", needs: e.meta.needs || "",
-  link: e.link || "", notes: e.body, src: e.meta.src,
+  link: e.link || "", notes: e.body, owner: e.meta.owner || "", cover: e.meta.cover || "", postUrl: e.meta.postUrl || "", results: e.meta.results, src: e.meta.src,
 });
 
 export function payloadFromForm(v: FormValues, dateOverride?: string) {
@@ -164,6 +175,10 @@ export function payloadFromForm(v: FormValues, dateOverride?: string) {
     hashtags: isPost ? v.hashtags : undefined,
     asset: v.asset || undefined,
     needs: v.needs || undefined,
+    owner: v.owner || undefined,
+    cover: isPost && v.cover.trim() ? v.cover.trim() : undefined,
+    postUrl: isPost && v.postUrl.trim() ? v.postUrl.trim() : undefined,
+    results: isPost && v.results && Object.keys(v.results).length ? v.results : undefined,
     src: v.src,
   };
   const start = v.tbc ? "09:00" : v.start;

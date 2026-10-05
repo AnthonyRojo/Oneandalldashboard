@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { format, parseISO } from "date-fns";
-import { CalendarDays, Clock, Link2, Copy, Check, Pencil, Trash2, FolderOpen, AlertTriangle, CopyPlus, Circle, Heart, MessageCircle, Send, Bookmark, Hourglass } from "lucide-react";
-import { STATUSES, STATUS_IDS, IG, type PostStatus } from "@/lib/calendar-meta";
-import { C, EVENT_LABELS, relDay, timeLabel, countdown, readiness, hashtagCount, type Ev } from "./utils";
-import { Drawer, CloseButton, CampaignTag, IconButton, FormatIcon, PlatformBadges } from "./ui";
+import { CalendarDays, Clock, Link2, Copy, Check, Pencil, Trash2, FolderOpen, AlertTriangle, CopyPlus, Circle, Heart, MessageCircle, Send, Bookmark, Hourglass, UserRound, ExternalLink, BarChart3 } from "lucide-react";
+import { STATUSES, STATUS_IDS, IG, RESULT_FIELDS, engagementRate, type EventMeta, type PostResults, type PostStatus } from "@/lib/calendar-meta";
+import { C, EVENT_LABELS, relDay, timeLabel, countdown, readiness, hashtagCount, safeUrl, todayStr, type Ev } from "./utils";
+import { Drawer, CloseButton, CampaignTag, IconButton, FormatIcon, PlatformBadges, OwnerSelect } from "./ui";
 
 interface Props {
   e: Ev;
@@ -16,9 +16,11 @@ interface Props {
   onStatus: (s: PostStatus) => void;
   onShift: (days: number) => void;
   onJump: () => void;
+  /** Merge fields into the event's metadata (owner, live link, results…) */
+  onMeta: (patch: Partial<EventMeta>) => Promise<void>;
 }
 
-export default function EventDrawer({ e, onClose, onEdit, onDuplicate, onDelete, onStatus, onShift, onJump }: Props) {
+export default function EventDrawer({ e, onClose, onEdit, onDuplicate, onDelete, onStatus, onShift, onJump, onMeta }: Props) {
   const [confirm, setConfirm] = useState(false);
   const [copied, setCopied] = useState<"caption" | "tags" | null>(null);
   const [preview, setPreview] = useState(false);
@@ -55,6 +57,11 @@ export default function EventDrawer({ e, onClose, onEdit, onDuplicate, onDelete,
             <span className="text-[12px]" style={{ color: C.faint }}>{relDay(e.date)}</span>
           </div>
           <div className="flex items-center gap-2.5"><Clock className="w-4 h-4 flex-shrink-0" style={{ color: C.faint }} />{timeLabel(e)}</div>
+          <div className="flex items-center gap-2.5">
+            <UserRound className="w-4 h-4 flex-shrink-0" style={{ color: C.faint }} />
+            <OwnerSelect value={e.meta.owner} onChange={(owner) => onMeta({ owner: owner || undefined })}
+              className="text-[13.5px] bg-transparent rounded-md px-1 -ml-1 py-0.5 hover:bg-stone-100 cursor-pointer outline-none focus:ring-2 focus:ring-amber-200" />
+          </div>
           {cd && (
             <div className="flex items-center gap-2.5"><Hourglass className="w-4 h-4 flex-shrink-0" style={{ color: C.faint }} /><span className="font-medium" style={{ color: e.color }}>{cd.label}</span></div>
           )}
@@ -98,6 +105,8 @@ export default function EventDrawer({ e, onClose, onEdit, onDuplicate, onDelete,
             </div>
           </div>
         )}
+
+        {isPost && e.meta.status === "posted" && <Results key={e.id} e={e} onMeta={onMeta} />}
 
         {r && e.meta.status !== "posted" && (
           <div>
@@ -209,6 +218,57 @@ function IgPreview({ e }: { e: Ev }) {
         <span className="font-semibold">One &amp; All Hub</span>{" "}
         {open || !folded ? full : <>{full.slice(0, cut).trimEnd()}… <button type="button" onClick={() => setOpen(true)} style={{ color: "#737373" }}>more</button></>}
       </p>
+    </div>
+  );
+}
+
+/** After it's posted: the live link and the numbers from Instagram Insights. */
+function Results({ e, onMeta }: { e: Ev; onMeta: (patch: Partial<EventMeta>) => Promise<void> }) {
+  const [url, setUrl] = useState(e.meta.postUrl || "");
+  const [vals, setVals] = useState<Record<string, string>>(() =>
+    Object.fromEntries(RESULT_FIELDS.map(({ key }) => [key, e.meta.results?.[key]?.toString() ?? ""])));
+  const [saving, setSaving] = useState(false);
+  const dirty = url.trim() !== (e.meta.postUrl || "") || RESULT_FIELDS.some(({ key }) => vals[key] !== (e.meta.results?.[key]?.toString() ?? ""));
+  const rate = engagementRate(e.meta.results);
+  const save = async () => {
+    const results: PostResults = {};
+    RESULT_FIELDS.forEach(({ key }) => { const n = parseInt(vals[key].replace(/[^0-9]/g, ""), 10); if (!Number.isNaN(n)) results[key] = n; });
+    const has = Object.keys(results).length > 0;
+    setSaving(true);
+    try { await onMeta({ postUrl: url.trim() || undefined, results: has ? { ...results, at: todayStr() } : undefined }); } finally { setSaving(false); }
+  };
+  return (
+    <div className="rounded-xl border p-3 flex flex-col gap-3" style={{ borderColor: C.line, background: "#FAFAF8" }}>
+      <div className="flex items-center justify-between">
+        <p className="text-[12px] font-medium inline-flex items-center gap-1.5" style={{ color: C.sub }}><BarChart3 className="w-3.5 h-3.5" /> Results</p>
+        {rate !== null && <span className="text-[12px] font-semibold tabular-nums" style={{ color: "#15803D" }} title="Likes + comments + saves + shares, per 100 people reached">{rate.toFixed(1)}% engagement</span>}
+      </div>
+      <div className="flex items-center gap-2">
+        <input type="url" value={url} onChange={(ev) => setUrl(ev.target.value)} placeholder="Paste the link to the live post" aria-label="Link to the live post"
+          className="flex-1 min-w-0 px-2.5 py-1.5 border rounded-lg text-[13px] bg-white outline-none focus:border-amber-400" style={{ borderColor: C.line }} />
+        {e.meta.postUrl && (
+          <a href={safeUrl(e.meta.postUrl)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[12px] font-medium px-2 py-1.5 rounded-lg hover:bg-white" style={{ color: "#1D4ED8" }}>
+            Open <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        )}
+      </div>
+      <div className="grid grid-cols-5 gap-1.5">
+        {RESULT_FIELDS.map(({ key, label: l }) => (
+          <label key={key} className="flex flex-col gap-0.5">
+            <span className="text-[10.5px]" style={{ color: C.faint }}>{l}</span>
+            <input inputMode="numeric" value={vals[key]} onChange={(ev) => setVals((v) => ({ ...v, [key]: ev.target.value }))} placeholder="–"
+              className="w-full px-1.5 py-1 border rounded-md text-[13px] tabular-nums bg-white outline-none focus:border-amber-400" style={{ borderColor: C.line }} />
+          </label>
+        ))}
+      </div>
+      <div className="flex items-center justify-between">
+        <span className="text-[11px]" style={{ color: C.faint }}>
+          {e.meta.results?.at ? `Numbers from ${format(parseISO(e.meta.results.at), "d MMM")}` : "From Instagram Insights, about a week after posting"}
+        </span>
+        <button type="button" onClick={save} disabled={!dirty || saving} className="px-3 py-1 rounded-lg text-[12.5px] font-semibold text-white disabled:opacity-40" style={{ background: C.ink }}>
+          {saving ? "Saving…" : "Save"}
+        </button>
+      </div>
     </div>
   );
 }

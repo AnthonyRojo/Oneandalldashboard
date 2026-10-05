@@ -10,7 +10,7 @@ import {
   type PostFormat, type PostStatus,
 } from "@/lib/calendar-meta";
 import { C, EVENT_COLORS, EVENT_ICONS, EVENT_LABELS, EVENT_TYPES, FORMAT_ICONS, addMinutes, toMin, hashtagCount, type FormValues } from "./utils";
-import { Drawer, CloseButton, Kbd } from "./ui";
+import { Drawer, CloseButton, Kbd, OwnerSelect, usePeople } from "./ui";
 
 interface Props {
   mode: "create" | "edit";
@@ -53,6 +53,7 @@ export default function EventForm({ mode, initial, onCancel, onSave, onDelete }:
   const changeType = (type: EventType) => set({ type, tbc: type === "Post" ? v.tbc : false, platforms: type === "Post" && !v.platforms.length ? ["instagram"] : v.platforms });
   const togglePlatform = (p: (typeof PLATFORM_IDS)[number]) => set({ platforms: v.platforms.includes(p) ? v.platforms.filter((x) => x !== p) : [...v.platforms, p] });
   const tagCount = hashtagCount(v.hashtags);
+  const { meId } = usePeople();
   const addLockedTags = () => {
     const extra = v.campaign ? CAMPAIGN_HASHTAGS[v.campaign] : "";
     const want = `${LOCKED_HASHTAGS}${extra ? ` ${extra}` : ""}`.split(" ");
@@ -108,6 +109,14 @@ export default function EventForm({ mode, initial, onCancel, onSave, onDelete }:
                 );
               })}
             </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[12px] font-medium" style={{ color: C.sub }} htmlFor="oa-owner">{isPost ? "Who's making and posting it" : "Who's in charge"}</label>
+              {meId && v.owner !== meId && <button type="button" onClick={() => set({ owner: meId })} className="text-[11.5px] font-medium hover:underline" style={{ color: C.accentInk }}>Assign to me</button>}
+            </div>
+            <OwnerSelect value={v.owner} onChange={(owner) => set({ owner })} className={input} style={{ borderColor: C.line }} />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -254,6 +263,18 @@ export default function EventForm({ mode, initial, onCancel, onSave, onDelete }:
               <label className={label} style={{ color: C.sub }} htmlFor="oa-asset">Where the files are</label>
               <input id="oa-asset" value={v.asset} onChange={(e) => set({ asset: e.target.value })} className={input} style={{ borderColor: C.line }} placeholder="File name, Figma frame or Canva design" />
             </div>
+            {isPost && (
+              <div>
+                <label className={label} style={{ color: C.sub }} htmlFor="oa-cover">Cover image link <span style={{ color: C.faint }}>(optional, shows in Grid view)</span></label>
+                <input id="oa-cover" type="url" value={v.cover} onChange={(e) => set({ cover: e.target.value })} className={input} style={{ borderColor: C.line }} placeholder="https://… link to a .jpg or .png" />
+              </div>
+            )}
+            {isPost && v.status === "posted" && (
+              <div>
+                <label className={label} style={{ color: C.sub }} htmlFor="oa-posturl">Link to the live post</label>
+                <input id="oa-posturl" type="url" value={v.postUrl} onChange={(e) => set({ postUrl: e.target.value })} className={input} style={{ borderColor: C.line }} placeholder="https://www.instagram.com/p/…" />
+              </div>
+            )}
             <div>
               <label className={label} style={{ color: C.sub }} htmlFor="oa-link">Link</label>
               <input id="oa-link" type="url" value={v.link} onChange={(e) => set({ link: e.target.value })} className={input} style={{ borderColor: C.line }} placeholder="Humanitix, Canva, Drive or meeting link" />

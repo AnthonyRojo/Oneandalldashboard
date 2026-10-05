@@ -6,7 +6,7 @@ import { format, parseISO, subDays } from "date-fns";
 import { AlertTriangle, Plus } from "lucide-react";
 import { STATUSES, STATUS_IDS, type PostStatus } from "@/lib/calendar-meta";
 import { C, dkey, relDay, countdown, readiness, type Ev } from "./utils";
-import { DND_EVENT, useEventDrag, type DragItem, CampaignTag, FormatIcon, PlatformBadges } from "./ui";
+import { DND_EVENT, useEventDrag, type DragItem, CampaignTag, FormatIcon, PlatformBadges, OwnerBadge } from "./ui";
 
 interface Props {
   events: Ev[];
@@ -92,6 +92,7 @@ function Card({ e, today, onOpen }: { e: Ev; today: string; onOpen: (e: Ev) => v
         <PlatformBadges platforms={e.meta.platforms} story={e.meta.story} />
         {cd && cd.n >= 0 && <span className="text-[10.5px] font-semibold tabular-nums" style={{ color: e.color }} title={cd.label}>{cd.short}</span>}
         {overdue && <span className="inline-flex items-center gap-1 text-[10.5px] font-medium" style={{ color: "#B91C1C" }}><AlertTriangle className="w-3 h-3" />Overdue</span>}
+        <span className="ml-auto"><OwnerBadge id={e.meta.owner} name /></span>
       </div>
       {e.meta.needs && e.meta.status !== "posted" && (
         <p className="mt-2 text-[11px] leading-snug rounded-md px-2 py-1" style={{ background: "#FFF6E0", color: "#8A4B06" }}>Needs: {e.meta.needs}</p>

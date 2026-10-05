@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useDrag } from "react-dnd";
 import { Check, X } from "lucide-react";
 import { CAMPAIGNS, PLATFORMS, STATUSES, type CampaignId, type Platform, type PostFormat, type PostStatus } from "@/lib/calendar-meta";
@@ -153,4 +153,43 @@ export function StatusDot({ status }: { status?: PostStatus }) {
   const s = STATUSES[status];
   return <span title={s.label} aria-label={s.label} className="w-[7px] h-[7px] rounded-full flex-shrink-0"
     style={status === "idea" ? { border: `1.5px solid ${s.color}` } : { background: s.color }} />;
+}
+
+// ── People (who a post is assigned to) ───────────────────────────────────────
+
+export interface Person { id: string; name: string; avatar?: string; }
+export const PeopleContext = createContext<{ people: Person[]; meId?: string }>({ people: [] });
+export const usePeople = () => useContext(PeopleContext);
+
+const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?";
+const AVATAR_TINTS = ["#E0E7FF", "#FCE7F3", "#DCFCE7", "#FEF3C7", "#E0F2FE", "#F3E8FF"];
+const tint = (id: string) => AVATAR_TINTS[[...id].reduce((n, c) => n + c.charCodeAt(0), 0) % AVATAR_TINTS.length];
+
+/** Initials bubble for a post's owner; with `name`, also the first name. */
+export function OwnerBadge({ id, name: showName, size = 18 }: { id?: string; name?: boolean; size?: number }) {
+  const { people, meId } = usePeople();
+  if (!id) return null;
+  const p = people.find((x) => x.id === id);
+  const full = p?.name || "Former member";
+  const label = id === meId ? "You" : full.split(" ")[0];
+  return (
+    <span className="inline-flex items-center gap-1 min-w-0" title={`Assigned to ${full}`}>
+      <span className="rounded-full inline-flex items-center justify-center font-bold flex-shrink-0"
+        style={{ width: size, height: size, fontSize: size * 0.45, background: tint(id), color: C.ink }}>{initials(full)}</span>
+      {showName && <span className="text-[11.5px] truncate" style={{ color: C.sub }}>{label}</span>}
+    </span>
+  );
+}
+
+/** Dropdown to pick (or clear) a post's owner. */
+export function OwnerSelect({ value, onChange, className = "", style }: { value?: string; onChange: (id: string) => void; className?: string; style?: React.CSSProperties }) {
+  const { people, meId } = usePeople();
+  const sorted = [...people].sort((a, b) => Number(b.id === meId) - Number(a.id === meId) || a.name.localeCompare(b.name));
+  return (
+    <select value={value || ""} onChange={(e) => onChange(e.target.value)} className={className} style={style} aria-label="Assigned to">
+      <option value="">Nobody yet</option>
+      {sorted.map((p) => <option key={p.id} value={p.id}>{p.id === meId ? `${p.name} (me)` : p.name}</option>)}
+      {value && !people.some((p) => p.id === value) && <option value={value}>Former member</option>}
+    </select>
+  );
 }

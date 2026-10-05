@@ -4,24 +4,27 @@ import { useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { Check } from "lucide-react";
 import { CAMPAIGNS, type CampaignId } from "@/lib/calendar-meta";
-import { SCHEDULE_GROUPS, scheduleMatcher, type ScheduleItem } from "@/lib/campaign-schedule";
+import { SCHEDULE_GROUPS, RETIRED_SRCS, scheduleMatcher, type ScheduleItem } from "@/lib/campaign-schedule";
 import { C, fmt12, type Ev } from "./utils";
 import { Modal, CloseButton, StatusPill } from "./ui";
 
-export interface ImportPlan { create: ScheduleItem[]; update: { id: string; item: ScheduleItem }[]; }
+export interface ImportPlan { create: ScheduleItem[]; update: { id: string; item: ScheduleItem }[]; remove: string[]; }
 
 export default function ImportModal({ existing, onClose, onImport }: { existing: Ev[]; onClose: () => void; onImport: (p: ImportPlan) => Promise<void> }) {
   const match = useMemo(() => scheduleMatcher(existing), [existing]);
   const [picked, setPicked] = useState<Set<CampaignId>>(new Set(SCHEDULE_GROUPS.map((g) => g.id)));
   const [refresh, setRefresh] = useState(false);
+  const retired = useMemo(() => RETIRED_SRCS.flatMap((r) => { const e = existing.find((x) => x.meta.src === r.src); return e ? [{ e, why: r.why }] : []; }), [existing]);
+  const [dropRetired, setDropRetired] = useState(true);
   const [busy, setBusy] = useState(false);
 
   const groups = SCHEDULE_GROUPS.filter((g) => picked.has(g.id));
   const plan: ImportPlan = {
     create: groups.flatMap((g) => g.items.filter((s) => !match(s))),
     update: refresh ? groups.flatMap((g) => g.items.flatMap((s) => { const m = match(s); return m ? [{ id: m.id, item: s }] : []; })) : [],
+    remove: dropRetired ? retired.map((r) => r.e.id) : [],
   };
-  const total = plan.create.length + plan.update.length;
+  const total = plan.create.length + plan.update.length + plan.remove.length;
 
   return (
     <Modal onClose={busy ? () => {} : onClose} width={680} label="Import campaign schedule">
@@ -63,6 +66,17 @@ export default function ImportModal({ existing, onClose, onImport }: { existing:
             </div>
           );
         })}
+        {retired.length > 0 && (
+          <div className="rounded-2xl border px-4 py-3" style={{ borderColor: "#F5D27A", background: "#FFFBEB" }}>
+            <label className="flex items-start gap-2.5 text-[13px] cursor-pointer" style={{ color: C.ink }}>
+              <input type="checkbox" checked={dropRetired} onChange={(e) => setDropRetired(e.target.checked)} className="mt-0.5 accent-amber-500" />
+              <span>Remove {retired.length} item{retired.length === 1 ? "" : "s"} that the plan has replaced</span>
+            </label>
+            <ul className="mt-1.5 pl-6 flex flex-col gap-0.5 text-[12px]" style={{ color: C.sub }}>
+              {retired.map(({ e, why }) => <li key={e.id}><span style={{ color: C.ink }}>{format(parseISO(e.date), "d MMM")} · {e.title}</span>: {why}</li>)}
+            </ul>
+          </div>
+        )}
         <label className="flex items-start gap-2.5 text-[13px] cursor-pointer px-1" style={{ color: C.sub }}>
           <input type="checkbox" checked={refresh} onChange={(e) => setRefresh(e.target.checked)} className="mt-0.5 accent-amber-500" />
           <span>Also refresh items that are already in the calendar <span style={{ color: C.faint }}>(overwrites their status, caption, hashtags and notes with the schedule&apos;s version)</span></span>
@@ -70,12 +84,12 @@ export default function ImportModal({ existing, onClose, onImport }: { existing:
       </div>
       <div className="px-6 py-4 border-t flex items-center gap-3 sticky bottom-0 bg-white" style={{ borderColor: C.line }}>
         <span className="text-[13px] mr-auto" style={{ color: C.sub }}>
-          {plan.create.length} to add{plan.update.length ? `, ${plan.update.length} to refresh` : ""}
+          {plan.create.length} to add{plan.update.length ? `, ${plan.update.length} to refresh` : ""}{plan.remove.length ? `, ${plan.remove.length} to remove` : ""}
         </span>
         <button type="button" onClick={onClose} disabled={busy} className="px-4 py-2 rounded-xl border bg-white text-sm" style={{ borderColor: C.line }}>Cancel</button>
         <button type="button" disabled={!total || busy} onClick={async () => { setBusy(true); try { await onImport(plan); } finally { setBusy(false); } }}
           className="px-4 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ background: C.accent }}>
-          {busy ? "Importing…" : total ? `Import ${total}` : "Nothing new"}
+          {busy ? "Updating…" : total ? `Update calendar (${total})` : "Nothing new"}
         </button>
       </div>
     </Modal>

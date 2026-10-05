@@ -5,7 +5,7 @@ import { format, parseISO, startOfWeek } from "date-fns";
 import { AlertTriangle, Trash2, X } from "lucide-react";
 import { STATUSES, STATUS_IDS, type PostStatus } from "@/lib/calendar-meta";
 import { C, EVENT_LABELS, relDay, timeLabel, WEEK_OPTS, dkey, countdown, type Ev } from "./utils";
-import { CampaignTag, EventTitle, FormatIcon, PlatformBadges } from "./ui";
+import { CampaignTag, EventTitle, FormatIcon, PlatformBadges, OwnerBadge, OwnerSelect } from "./ui";
 
 interface Props {
   events: Ev[];
@@ -16,10 +16,11 @@ interface Props {
   onStatus: (id: string, s: PostStatus) => void;
   onBulkStatus: (ids: string[], s: PostStatus) => void;
   onBulkShift: (ids: string[], days: number) => void;
+  onBulkOwner: (ids: string[], owner: string) => void;
   onBulkDelete: (ids: string[]) => void;
 }
 
-export default function ListView({ events, today, filtersActive, onOpen, onCreate, onStatus, onBulkStatus, onBulkShift, onBulkDelete }: Props) {
+export default function ListView({ events, today, filtersActive, onOpen, onCreate, onStatus, onBulkStatus, onBulkShift, onBulkOwner, onBulkDelete }: Props) {
   const [showPast, setShowPast] = useState(false);
   const [sel, setSel] = useState<Set<string>>(new Set());
   const list = showPast ? events : events.filter((e) => e.date >= today || (e.type === "Post" && e.meta.status && e.meta.status !== "posted"));
@@ -55,6 +56,7 @@ export default function ListView({ events, today, filtersActive, onOpen, onCreat
               <option value="">Set status…</option>
               {STATUS_IDS.map((s) => <option key={s} value={s}>{STATUSES[s].label}</option>)}
             </select>
+            <BulkOwner onPick={(o) => onBulkOwner(ids, o)} />
             <div className="flex items-center rounded-lg border overflow-hidden" style={{ borderColor: C.line }}>
               <span className="px-2 text-xs" style={{ color: C.sub }}>Move</span>
               {[-7, -1, 1, 7].map((d) => (
@@ -113,6 +115,7 @@ export default function ListView({ events, today, filtersActive, onOpen, onCreat
                     <span className="inline-flex items-center gap-1">{e.type === "Post" && <FormatIcon format={e.meta.format} />}{e.type === "Post" ? e.meta.format || "Post" : EVENT_LABELS[e.type]}</span>
                     <PlatformBadges platforms={e.meta.platforms} story={e.meta.story} />
                     <span>{timeLabel(e)}</span>
+                    <OwnerBadge id={e.meta.owner} name />
                     {(() => { const cd = countdown(e); return cd && cd.n >= 0 ? <span className="font-semibold tabular-nums" style={{ color: e.color }} title={cd.label}>{cd.short}</span> : null; })()}
                     {e.meta.needs && e.meta.status !== "posted" && (
                       <span className="inline-flex items-center gap-1" style={{ color: "#8A4B06" }}><AlertTriangle className="w-3 h-3" />{e.meta.needs}</span>
@@ -132,5 +135,16 @@ export default function ListView({ events, today, filtersActive, onOpen, onCreat
         </div>
       ))}
     </div>
+  );
+}
+
+/** "Assign to…" for selected rows; resets after each pick so it can be reused. */
+function BulkOwner({ onPick }: { onPick: (owner: string) => void }) {
+  const [k, setK] = useState(0);
+  return (
+    <span className="relative inline-flex">
+      <span className="absolute inset-0 px-2 py-1 text-sm pointer-events-none rounded-lg border bg-white" style={{ borderColor: C.line, color: C.ink }}>Assign to…</span>
+      <OwnerSelect key={k} value="" onChange={(o) => { onPick(o); setK((n) => n + 1); }} className="opacity-0 px-2 py-1 text-sm w-[110px] cursor-pointer" />
+    </span>
   );
 }
