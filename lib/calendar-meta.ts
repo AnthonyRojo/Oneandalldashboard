@@ -18,6 +18,8 @@ export interface EventMeta {
   platforms?: Platform[];
   /** Also goes up as a story (e.g. "Feed + Story" in the schedule sheet) */
   story?: boolean;
+  /** Goes on the main Instagram feed, so it shows in the Grid view */
+  feed?: boolean;
   /** Time not confirmed yet — UI shows "No set time" instead of a clock time. */
   tbc?: boolean;
   caption?: string;

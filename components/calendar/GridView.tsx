@@ -5,7 +5,7 @@ import { useDrop } from "react-dnd";
 import { format, parseISO } from "date-fns";
 import { Check, Clapperboard, GalleryHorizontalEnd } from "lucide-react";
 import { STATUSES } from "@/lib/calendar-meta";
-import { C, onIgGrid, sortEv, type Ev } from "./utils";
+import { C, canBeOnFeed, sortEv, type Ev } from "./utils";
 import { DND_EVENT, useEventDrag, type DragItem, FormatIcon } from "./ui";
 
 interface Props {
@@ -19,8 +19,14 @@ interface Props {
 /** Instagram profile grid: newest top-left, exactly as the feed will read. */
 export default function GridView({ events, today, onOpen, onSwap }: Props) {
   const [hideIdeas, setHideIdeas] = useState(false);
-  const feed = useMemo(() => events.filter(onIgGrid).filter((e) => !hideIdeas || (e.meta.status && e.meta.status !== "idea")).sort((a, b) => sortEv(b, a)), [events, hideIdeas]);
-  const live = feed.filter((e) => e.meta.status === "posted").length;
+  const [showUnmarked, setShowUnmarked] = useState(false);
+  const candidates = useMemo(() => events.filter(canBeOnFeed), [events]);
+  const unmarked = candidates.filter((e) => !e.meta.feed).length;
+  const feed = useMemo(() => candidates
+    .filter((e) => (showUnmarked || e.meta.feed) && (!hideIdeas || (e.meta.status && e.meta.status !== "idea")))
+    .sort((a, b) => sortEv(b, a)), [candidates, hideIdeas, showUnmarked]);
+  const live = feed.filter((e) => e.meta.feed && e.meta.status === "posted").length;
+  const planned = feed.filter((e) => e.meta.feed).length - live;
   const firstPast = feed.findIndex((e) => e.date < today || e.meta.status === "posted");
 
   return (
@@ -30,14 +36,23 @@ export default function GridView({ events, today, onOpen, onSwap }: Props) {
           <span className="w-11 h-11 rounded-full flex-shrink-0 p-[2px]" style={{ background: "conic-gradient(#FFD734, #E83686, #FFD734)" }}><span className="block w-full h-full rounded-full bg-white" /></span>
           <div className="min-w-0">
             <p className="text-[14px] font-semibold" style={{ color: C.ink }}>One &amp; All Hub</p>
-            <p className="text-[12px]" style={{ color: C.sub }}>{live} live · {feed.length - live} planned</p>
+            <p className="text-[12px]" style={{ color: C.sub }}>{live} live · {planned} planned</p>
           </div>
-          <label className="ml-auto flex items-center gap-1.5 text-[12px] cursor-pointer" style={{ color: C.sub }}>
-            <input type="checkbox" checked={hideIdeas} onChange={(e) => setHideIdeas(e.target.checked)} className="accent-amber-500" /> Hide ideas
-          </label>
+          <div className="ml-auto flex flex-col items-end gap-0.5">
+            <label className="flex items-center gap-1.5 text-[12px] cursor-pointer" style={{ color: C.sub }}>
+              <input type="checkbox" checked={hideIdeas} onChange={(e) => setHideIdeas(e.target.checked)} className="accent-amber-500" /> Hide ideas
+            </label>
+            {unmarked > 0 && (
+              <label className="flex items-center gap-1.5 text-[12px] cursor-pointer" style={{ color: C.sub }}>
+                <input type="checkbox" checked={showUnmarked} onChange={(e) => setShowUnmarked(e.target.checked)} className="accent-amber-500" /> Show {unmarked} not on feed
+              </label>
+            )}
+          </div>
         </div>
         {feed.length === 0 ? (
-          <p className="p-10 text-center text-sm" style={{ color: C.sub }}>No feed posts here. Stories and EDMs don&apos;t show on the grid.</p>
+          <p className="p-10 text-center text-sm" style={{ color: C.sub }}>
+            No posts are marked for the main feed yet. Open a post and tick <b style={{ color: C.ink }}>Goes on the main feed</b> to add it here{unmarked > 0 ? ", or tick “Show not on feed” above to find them" : ""}.
+          </p>
         ) : (
           <div className="grid grid-cols-3 gap-[2px]" style={{ background: C.lineSoft }}>
             {feed.map((e, i) => <Tile key={e.id} e={e} today={today} divider={i === firstPast && i > 0} onOpen={onOpen} onSwap={onSwap} />)}
@@ -49,7 +64,7 @@ export default function GridView({ events, today, onOpen, onSwap }: Props) {
         <p>Newest is top-left, the way people see your profile. Use it to check that colours and formats alternate well before posts go out.</p>
         <p><b style={{ color: C.ink }}>Drag one tile onto another</b> to swap their dates.</p>
         <p>Add a <b style={{ color: C.ink }}>cover image link</b> when editing a post to see the real thumbnail here.</p>
-        <p>Stories and EDMs are left out. Posts without a platform are shown in case they&apos;re for Instagram.</p>
+        <p>Only posts marked <b style={{ color: C.ink }}>Goes on the main feed</b> show here. Tick it when editing a post, or from the post&apos;s details. Stories and EDMs can&apos;t go on the feed.</p>
       </aside>
     </div>
   );
@@ -65,13 +80,14 @@ function Tile({ e, today, divider, onOpen, onSwap }: { e: Ev; today: string; div
   }), [e.id, onSwap]);
   const posted = e.meta.status === "posted";
   const status = e.meta.status || "idea";
+  const offFeed = !e.meta.feed;
   const Corner = e.meta.format === "Reel" || e.meta.format === "Video" ? Clapperboard : e.meta.format === "Carousel" ? GalleryHorizontalEnd : null;
   return (
     <div ref={drop as unknown as React.Ref<HTMLDivElement>} className="relative" style={{ outline: isOver ? `3px solid ${C.accent}` : "none", outlineOffset: -3, zIndex: isOver ? 1 : 0 }}>
       {divider && <span className="absolute -top-[2px] left-0 right-0 h-[2px] z-10" style={{ background: C.accent }} aria-hidden />}
       <button ref={dragRef} type="button" onClick={() => onOpen(e)} title={`${e.title} · ${format(parseISO(e.date), "EEE d MMM")} · ${STATUSES[status].label}`}
         className="relative block w-full overflow-hidden text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400"
-        style={{ aspectRatio: "3 / 4", opacity: isDragging ? 0.4 : 1, cursor: "grab", background: `${e.color}1A` }}>
+        style={{ aspectRatio: "3 / 4", opacity: isDragging ? 0.4 : offFeed ? 0.45 : 1, filter: offFeed ? "grayscale(0.6)" : undefined, cursor: "grab", background: `${e.color}1A` }}>
         {e.meta.cover ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={e.meta.cover} alt="" className="absolute inset-0 w-full h-full object-cover" draggable={false} />
@@ -81,6 +97,7 @@ function Tile({ e, today, divider, onOpen, onSwap }: { e: Ev; today: string; div
             <span className="text-[11px] sm:text-[12px] font-semibold leading-tight line-clamp-4" style={{ color: C.ink }}>{e.title}</span>
           </span>
         )}
+        {offFeed && <span className="absolute top-1.5 left-1.5 px-1.5 py-px rounded text-[10px] font-semibold" style={{ background: "rgba(255,255,255,.92)", color: C.sub }}>Not on feed</span>}
         {Corner && <Corner className="absolute top-1.5 right-1.5 w-4 h-4 drop-shadow" style={{ color: e.meta.cover ? "white" : e.color }} aria-hidden />}
         <span className="absolute left-1 bottom-1 right-1 flex items-center gap-1">
           <span className="px-1.5 py-px rounded text-[10px] font-semibold tabular-nums" style={{ background: "rgba(255,255,255,.92)", color: posted ? "#15803D" : e.date < today ? "#B91C1C" : C.ink }}>

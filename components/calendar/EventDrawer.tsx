@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { format, parseISO } from "date-fns";
-import { CalendarDays, Clock, Link2, Copy, Check, Pencil, Trash2, FolderOpen, AlertTriangle, CopyPlus, Circle, Heart, MessageCircle, Send, Bookmark, Hourglass, UserRound, ExternalLink, BarChart3 } from "lucide-react";
+import { CalendarDays, Clock, Link2, Copy, Check, Pencil, Trash2, FolderOpen, AlertTriangle, CopyPlus, Circle, Heart, MessageCircle, Send, Bookmark, Hourglass, UserRound, ExternalLink, BarChart3, LayoutGrid } from "lucide-react";
 import { STATUSES, STATUS_IDS, IG, RESULT_FIELDS, engagementRate, type EventMeta, type PostResults, type PostStatus } from "@/lib/calendar-meta";
-import { C, EVENT_LABELS, relDay, timeLabel, countdown, readiness, hashtagCount, safeUrl, todayStr, type Ev } from "./utils";
+import { C, EVENT_LABELS, canBeOnFeed, relDay, timeLabel, countdown, readiness, hashtagCount, safeUrl, todayStr, type Ev } from "./utils";
 import { Drawer, CloseButton, CampaignTag, IconButton, FormatIcon, PlatformBadges, OwnerSelect } from "./ui";
 
 interface Props {
@@ -62,6 +62,15 @@ export default function EventDrawer({ e, onClose, onEdit, onDuplicate, onDelete,
             <OwnerSelect value={e.meta.owner} onChange={(owner) => onMeta({ owner: owner || undefined })}
               className="text-[13.5px] bg-transparent rounded-md px-1 -ml-1 py-0.5 hover:bg-stone-100 cursor-pointer outline-none focus:ring-2 focus:ring-amber-200" />
           </div>
+          {canBeOnFeed(e) && (
+            <div className="flex items-center gap-2.5">
+              <LayoutGrid className="w-4 h-4 flex-shrink-0" style={{ color: C.faint }} />
+              <label className="inline-flex items-center gap-1.5 cursor-pointer" title="Main-feed posts are the ones shown in the Grid view">
+                <input type="checkbox" checked={!!e.meta.feed} onChange={(ev) => onMeta({ feed: ev.target.checked || undefined })} className="accent-amber-500" />
+                Goes on the main feed
+              </label>
+            </div>
+          )}
           {cd && (
             <div className="flex items-center gap-2.5"><Hourglass className="w-4 h-4 flex-shrink-0" style={{ color: C.faint }} /><span className="font-medium" style={{ color: e.color }}>{cd.label}</span></div>
           )}

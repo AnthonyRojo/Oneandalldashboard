@@ -212,9 +212,14 @@ export default function EventForm({ mode, initial, onCancel, onSave, onDelete }:
                   })}
                 </div>
                 {v.format !== "Story" && v.format !== "EDM" && (
-                  <label className="mt-2 flex items-center gap-1.5 text-[12.5px] cursor-pointer" style={{ color: C.sub }}>
-                    <input type="checkbox" checked={v.story} onChange={(e) => set({ story: e.target.checked })} className="accent-amber-500" /> Share to stories too
-                  </label>
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                    <label className="flex items-center gap-1.5 text-[12.5px] cursor-pointer" style={{ color: C.sub }} title="Main-feed posts are the ones shown in the Grid view">
+                      <input type="checkbox" checked={v.feed} onChange={(e) => set({ feed: e.target.checked })} className="accent-amber-500" /> Goes on the main feed
+                    </label>
+                    <label className="flex items-center gap-1.5 text-[12.5px] cursor-pointer" style={{ color: C.sub }}>
+                      <input type="checkbox" checked={v.story} onChange={(e) => set({ story: e.target.checked })} className="accent-amber-500" /> Share to stories too
+                    </label>
+                  </div>
                 )}
               </div>
               <div>
