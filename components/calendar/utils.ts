@@ -97,8 +97,8 @@ export const isOverdue = (e: Ev, today: string) =>
   e.type === "Post" && !!e.meta.status && e.meta.status !== "posted" && e.date < today;
 export const isPosted = (e: Ev) => e.meta.status === "posted";
 
-/** Shows on the Instagram profile grid (feed formats, IG or no platform set yet). */
-export const onIgGrid = (e: Ev) =>
+/** Could go on the Instagram profile grid (feed formats, IG or no platform set yet). */
+export const canBeOnFeed = (e: { type: EventType; meta: EventMeta }) =>
   e.type === "Post" && e.meta.format !== "Story" && e.meta.format !== "EDM" && (!e.meta.platforms?.length || e.meta.platforms.includes("instagram"));
 
 export const safeUrl = (u?: string) => (u ? (/^https?:\/\//i.test(u) ? u : `https://${u}`) : "");
@@ -145,6 +145,7 @@ export interface FormValues {
   format: PostFormat | "";
   platforms: Platform[];
   story: boolean;
+  feed: boolean;
   caption: string;
   hashtags: string;
   asset: string;
@@ -162,13 +163,13 @@ export const blankForm = (date: string, type: EventType = "Post", start?: string
   title: "", type, campaign: "", date,
   start: start || "10:00", end: addMinutes(start || "10:00", 60),
   tbc: type === "Post" && !start, repeatWeeks: 1,
-  status: "idea", format: "", platforms: type === "Post" ? ["instagram"] : [], story: false, caption: "", hashtags: "", asset: "", needs: "", link: "", notes: "", owner: "", cover: "", postUrl: "",
+  status: "idea", format: "", platforms: type === "Post" ? ["instagram"] : [], story: false, feed: false, caption: "", hashtags: "", asset: "", needs: "", link: "", notes: "", owner: "", cover: "", postUrl: "",
 });
 
 export const formFromEvent = (e: Ev): FormValues => ({
   title: e.title, type: e.type, campaign: e.meta.campaign || "", date: e.date,
   start: e.start || "10:00", end: e.end || e.start || "11:00", tbc: !!e.meta.tbc, repeatWeeks: 1,
-  status: e.meta.status || "idea", format: e.meta.format || "", platforms: e.meta.platforms || [], story: !!e.meta.story,
+  status: e.meta.status || "idea", format: e.meta.format || "", platforms: e.meta.platforms || [], story: !!e.meta.story, feed: !!e.meta.feed,
   caption: e.meta.caption || "", hashtags: e.meta.hashtags || "", asset: e.meta.asset || "", needs: e.meta.needs || "",
   link: e.link || "", notes: e.body, owner: e.meta.owner || "", cover: e.meta.cover || "", postUrl: e.meta.postUrl || "", results: e.meta.results, src: e.meta.src,
 });
@@ -183,6 +184,7 @@ export function payloadFromForm(v: FormValues, dateOverride?: string) {
     format: isPost && v.format ? v.format : undefined,
     platforms: isPost && v.platforms.length ? v.platforms : undefined,
     story: isPost && v.story && v.format !== "Story" ? true : undefined,
+    feed: isPost && v.feed && v.format !== "Story" && v.format !== "EDM" ? true : undefined,
     caption: isPost ? v.caption : undefined,
     hashtags: isPost ? v.hashtags : undefined,
     asset: v.asset || undefined,

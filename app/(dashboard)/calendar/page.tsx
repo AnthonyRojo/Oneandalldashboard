@@ -298,7 +298,7 @@ export default function CalendarPage() {
       // Refresh the plan's text, but keep what the team has added since (owner, links, results…).
       const cur = byId.get(id)?.meta || {};
       const f = scheduleToForm(item);
-      const merged = { ...f, owner: cur.owner || "", cover: cur.cover || "", postUrl: cur.postUrl || "", results: cur.results, platforms: cur.platforms?.length ? cur.platforms : f.platforms };
+      const merged = { ...f, feed: !!cur.feed, owner: cur.owner || "", cover: cur.cover || "", postUrl: cur.postUrl || "", results: cur.results, platforms: cur.platforms?.length ? cur.platforms : f.platforms };
       try { await updateEvent(id, payloadFromForm(merged)); ok++; } catch { /* continue */ }
     }
     for (const id of remove) { try { await deleteEvent(id); ok++; } catch { /* continue */ } }
@@ -555,7 +555,9 @@ export default function CalendarPage() {
             onDuplicate={() => { setDetailId(null); setForm({ mode: "create", values: { ...formFromEvent(detail), title: `${detail.title} (copy)`, src: undefined, status: detail.type === "Post" ? "idea" : detail.meta.status || "idea" } }); }}
             onDelete={() => removeEvents([detail.id])} onStatus={(s) => setStatus([detail.id], s)} onShift={(d) => shiftEvents([detail.id], d)}
             onJump={() => { jumpTo(detail.date); setDetailId(null); }}
-            onMeta={(patch) => "owner" in patch && Object.keys(patch).length === 1 ? assign([detail.id], patch.owner || "") : updateMeta([detail.id], patch, "Results saved")} />
+            onMeta={(patch) => "owner" in patch && Object.keys(patch).length === 1 ? assign([detail.id], patch.owner || "")
+              : "feed" in patch && Object.keys(patch).length === 1 ? updateMeta([detail.id], patch, patch.feed ? "Added to the main feed" : "Taken off the main feed")
+              : updateMeta([detail.id], patch, "Results saved")} />
         )}
         {form && (
           <EventForm key={form.id || "new"} mode={form.mode} initial={form.values} onCancel={() => setForm(null)} onSave={saveForm}
