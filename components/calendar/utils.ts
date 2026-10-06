@@ -20,6 +20,16 @@ export const FORMAT_ICONS: Record<PostFormat, typeof Video> = {
 };
 export const WEEK_OPTS = { weekStartsOn: 1 as const }; // Monday-first (AU)
 
+export const OWNER_COLORS = [
+  "#2563EB", "#DC2626", "#16A34A", "#9333EA", "#EA580C", "#0891B2",
+  "#DB2777", "#65A30D", "#4F46E5", "#B45309", "#0D9488", "#BE123C",
+];
+export const UNASSIGNED_COLOR = "#9AA0AB";
+
+/** Colour per person, by team order so teammates never share one (until the palette runs out). */
+export const ownerColorMap = (ids: string[]) =>
+  new Map(ids.map((id, i) => [id, OWNER_COLORS[i % OWNER_COLORS.length]]));
+
 export const C = {
   page: "#F7F6F2",
   surface: "#FFFFFF",
@@ -72,11 +82,13 @@ export const fromMin = (t: number) => {
 };
 export const addMinutes = (hm: string, mins: number) => fromMin(toMin(hm) + mins);
 
-export function enrich(e: CalendarEvent): Ev {
+export function enrich(e: CalendarEvent, ownerColors?: Map<string, string>): Ev {
   const { body, meta } = parseEventMeta(e.description);
-  const color = meta.campaign
-    ? CAMPAIGNS[meta.campaign]?.color || EVENT_COLORS[e.type]
-    : e.type === "Post" && e.color ? e.color : EVENT_COLORS[e.type] || "#475569";
+  const color = ownerColors
+    ? (meta.owner && ownerColors.get(meta.owner)) || UNASSIGNED_COLOR
+    : meta.campaign
+      ? CAMPAIGNS[meta.campaign]?.color || EVENT_COLORS[e.type]
+      : e.type === "Post" && e.color ? e.color : EVENT_COLORS[e.type] || "#475569";
   return { ...e, body, meta, color, start: hhmm(e.startTime), end: hhmm(e.endTime) };
 }
 export const sortEv = (a: Ev, b: Ev) =>

@@ -15,7 +15,7 @@ import {
 } from "@/lib/calendar-meta";
 import { SCHEDULE_GROUPS, RETIRED_SRCS, scheduleMatcher, type ScheduleItem } from "@/lib/campaign-schedule";
 import {
-  C, EVENT_LABELS, EVENT_TYPES, WEEK_OPTS, dkey, enrich, sortEv, todayStr, toStamp, toMin, fromMin, isOverdue,
+  C, EVENT_LABELS, EVENT_TYPES, WEEK_OPTS, UNASSIGNED_COLOR, dkey, enrich, ownerColorMap, sortEv, todayStr, toStamp, toMin, fromMin, isOverdue,
   blankForm, formFromEvent, payloadFromForm, payloadFromEvent, exportCsv, exportIcs,
   type Ev, type FormValues, type EventPayload,
 } from "@/components/calendar/utils";
@@ -61,18 +61,19 @@ export default function CalendarPage() {
   const [view, setView] = useState<View>("month");
   const [hidden, setHidden] = useState<CampaignId[]>([]);
   const [hideNoCampaign, setHideNoCampaign] = useState(false);
+  const [colorBy, setColorBy] = useState<"person" | "campaign">("person");
   const loaded = useRef(false);
   useEffect(() => {
     try {
       const p = JSON.parse(localStorage.getItem(PREFS_KEY) || "{}");
-      if (p.view) setView(p.view); if (Array.isArray(p.hidden)) setHidden(p.hidden); if (p.hideNoCampaign) setHideNoCampaign(true);
+      if (p.view) setView(p.view); if (Array.isArray(p.hidden)) setHidden(p.hidden); if (p.hideNoCampaign) setHideNoCampaign(true); if (p.colorBy) setColorBy(p.colorBy);
     } catch { /* storage unavailable */ }
     loaded.current = true;
   }, []);
   useEffect(() => {
     if (!loaded.current) return;
-    try { localStorage.setItem(PREFS_KEY, JSON.stringify({ view, hidden, hideNoCampaign })); } catch { /* storage unavailable */ }
-  }, [view, hidden, hideNoCampaign]);
+    try { localStorage.setItem(PREFS_KEY, JSON.stringify({ view, hidden, hideNoCampaign, colorBy })); } catch { /* storage unavailable */ }
+  }, [view, hidden, hideNoCampaign, colorBy]);
 
   const [cursor, setCursor] = useState(new Date());
   const [search, setSearch] = useState("");
@@ -91,7 +92,8 @@ export default function CalendarPage() {
   const searchRef = useRef<HTMLInputElement>(null);
 
   const today = todayStr();
-  const all = useMemo(() => currentEvents.map(enrich).sort(sortEv), [currentEvents]);
+  const ownerColors = useMemo(() => ownerColorMap(people.map((p) => p.id)), [people]);
+  const all = useMemo(() => currentEvents.map((e) => enrich(e, colorBy === "person" ? ownerColors : undefined)).sort(sortEv), [currentEvents, colorBy, ownerColors]);
   const byId = useMemo(() => new Map(all.map((e) => [e.id, e])), [all]);
   const detail = detailId ? byId.get(detailId) || null : null;
 
@@ -465,6 +467,30 @@ export default function CalendarPage() {
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="flex items-center gap-x-3 gap-y-1.5 mb-3 text-[12.5px] flex-wrap" style={{ color: C.sub }}>
+          <div className="flex rounded-lg p-0.5 border bg-white" style={{ borderColor: C.line }} role="group" aria-label="Colour by">
+            {(["person", "campaign"] as const).map((m) => (
+              <button key={m} type="button" onClick={() => setColorBy(m)} aria-pressed={colorBy === m}
+                className="h-6 px-2 rounded-md text-[12px] font-medium" style={colorBy === m ? { background: C.ink, color: "white" } : { color: C.sub }}>
+                {m === "person" ? "Colour by person" : "Colour by campaign"}
+              </button>
+            ))}
+          </div>
+          {colorBy === "person" && (
+            <>
+              {people.map((p) => (
+                <button key={p.id} type="button" onClick={() => setOwnerFilter((f) => (f === p.id || (f === "me" && p.id === meId) ? "all" : p.id))}
+                  title={`Only show ${p.name}'s`} className="inline-flex items-center gap-1.5 rounded-md px-1 hover:bg-white"
+                  style={{ fontWeight: p.id === meId ? 600 : 400, color: p.id === meId ? C.ink : C.sub }}>
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: ownerColors.get(p.id) }} />
+                  {p.id === meId ? `${p.name.split(" ")[0]} (you)` : p.name.split(" ")[0]}
+                </button>
+              ))}
+              <span className="inline-flex items-center gap-1.5 px-1"><span className="w-2.5 h-2.5 rounded-full" style={{ background: UNASSIGNED_COLOR }} />Unassigned</span>
+            </>
+          )}
         </div>
 
         {filtersActive && (
