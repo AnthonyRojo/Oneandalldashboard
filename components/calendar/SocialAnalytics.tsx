@@ -14,7 +14,7 @@ const nf = new Intl.NumberFormat("en-AU");
 export default function SocialAnalytics({ events, members }: { events: CalendarEvent[]; members: TeamMember[] }) {
   const [hover, setHover] = useState<string | null>(null);
   const data = useMemo(() => {
-    const posts = events.map(enrich).filter((e) => e.type === "Post");
+    const posts = events.map((e) => enrich(e)).filter((e) => e.type === "Post");
     const posted = posts.filter((e) => e.meta.status === "posted");
     const measured = posted.filter((e) => e.meta.results?.reach);
     const reach = measured.reduce((n, e) => n + (e.meta.results?.reach || 0), 0);
